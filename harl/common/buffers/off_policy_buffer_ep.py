@@ -73,12 +73,10 @@ class OffPolicyBufferEP(OffPolicyBufferBase):
             ]
         )
         if self.act_spaces[0].__class__.__name__ == "Discrete":
-            sp_available_actions = np.array(
-                [
-                    self.available_actions[agent_id][indice]
-                    for agent_id in range(self.num_agents)
-                ]
-            )
+            sp_available_actions = [
+                self.available_actions[agent_id][indice]
+                for agent_id in range(self.num_agents)
+            ]
 
         # compute the indices along n steps
         indices = [indice]
@@ -96,12 +94,10 @@ class OffPolicyBufferEP(OffPolicyBufferBase):
             ]
         )
         if self.act_spaces[0].__class__.__name__ == "Discrete":
-            sp_next_available_actions = np.array(
-                [
-                    self.next_available_actions[agent_id][indices[-1]]
-                    for agent_id in range(self.num_agents)
-                ]
-            )
+            sp_next_available_actions = [
+                self.next_available_actions[agent_id][indices[-1]]
+                for agent_id in range(self.num_agents)
+            ]
 
         # compute accumulated rewards and the corresponding gamma
         gamma_buffer = np.ones(self.n_step + 1)

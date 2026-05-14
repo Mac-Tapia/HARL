@@ -1,0 +1,8 @@
+# Default environment config for MADRL Lima Transporte.
+task: extorsion_detection
+max_steps: 672
+data_dir: data/processed
+dataset_source: data/processed/super_dataset_madrl.csv
+action_mode: continuous
+seed: 42
+state_type: EP

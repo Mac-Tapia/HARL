@@ -1,0 +1,74 @@
+{
+    "main_args": {
+        "algo": "hasac",
+        "env": "lima_transporte",
+        "exp_name": "madrl_lima_2026",
+        "load_config": ""
+    },
+    "algo_args": {
+        "seed": {
+            "seed": 42,
+            "seed_specify": true
+        },
+        "device": {
+            "cuda": false,
+            "cuda_deterministic": true,
+            "torch_threads": 4
+        },
+        "model": {
+            "hidden_sizes": [256, 128],
+            "activation_func": "relu",
+            "final_activation_func": "tanh",
+            "use_feature_normalization": true,
+            "initialization_method": "orthogonal_",
+            "gain": 0.01,
+            "lr": 3e-4,
+            "critic_lr": 1e-3
+        },
+        "algo": {
+            "share_param": false,
+            "fixed_order": true,
+            "gamma": 0.99,
+            "auto_alpha": true,
+            "alpha": 0.2,
+            "alpha_lr": 3e-4,
+            "buffer_size": 100000,
+            "batch_size": 256,
+            "polyak": 0.005,
+            "n_step": 5,
+            "use_huber_loss": true,
+            "use_policy_active_masks": true,
+            "huber_delta": 5.0
+        },
+        "train": {
+            "n_rollout_threads": 1,
+            "num_env_steps": 336000,
+            "warmup_steps": 500,
+            "train_interval": 50,
+            "update_per_train": 1,
+            "log_interval": null,
+            "eval_interval": 5000,
+            "use_valuenorm": true,
+            "use_linear_lr_decay": false,
+            "use_proper_time_limits": true,
+            "model_dir": null
+        },
+        "eval": {
+            "use_eval": false,
+            "n_eval_rollout_threads": 1,
+            "eval_episodes": 10
+        },
+        "render": {
+            "use_render": false,
+            "render_episodes": 5
+        },
+        "logger": {
+            "log_dir": "./results/harl"
+        }
+    },
+    "env_args": {
+        "max_steps": 672,
+        "data_dir": "data/processed",
+        "seed": 42
+    }
+}

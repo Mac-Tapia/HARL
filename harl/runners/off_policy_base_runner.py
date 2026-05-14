@@ -263,6 +263,20 @@ class OffPolicyBaseRunner:
                 else None,
             )
             self.insert(data)
+            # Log Lima multi-objectives per episode for off-policy algorithms
+            _dones_ep = np.all(dones, axis=1)
+            if _dones_ep.any():
+                _cur_step = (
+                    self.algo_args["train"]["warmup_steps"]
+                    + step * self.algo_args["train"]["n_rollout_threads"]
+                )
+                try:
+                    from harl.envs.lima_transporte.lima_harl_logger import LimaTransporteLogger as _LL
+                    for _t in range(self.algo_args["train"]["n_rollout_threads"]):
+                        if _dones_ep[_t]:
+                            _LL.log_off_policy_episode(infos[_t], self.num_agents, self.writter, _cur_step)
+                except Exception:
+                    pass
             obs = new_obs
             share_obs = new_share_obs
             available_actions = new_available_actions
@@ -456,9 +470,10 @@ class OffPolicyBaseRunner:
                 if available_actions[thread] is None:
                     action.append(self.action_spaces[agent_id].sample())
                 else:
+                    action_n = self.action_spaces[agent_id].n
                     action.append(
                         Categorical(
-                            torch.tensor(available_actions[thread, agent_id, :])
+                            torch.tensor(available_actions[thread, agent_id, :action_n])
                         ).sample()
                     )
             actions.append(action)
@@ -484,11 +499,12 @@ class OffPolicyBaseRunner:
                 if (
                     len(np.array(available_actions).shape) == 3
                 ):  # (n_threads, n_agents, action_number)
+                    action_n = self.action_spaces[agent_id].n
                     actions.append(
                         _t2n(
                             self.actor[agent_id].get_actions(
                                 obs[:, agent_id],
-                                available_actions[:, agent_id],
+                                available_actions[:, agent_id, :action_n],
                                 add_random,
                             )
                         )

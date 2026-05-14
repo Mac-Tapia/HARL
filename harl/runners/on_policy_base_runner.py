@@ -274,8 +274,9 @@ class OnPolicyBaseRunner:
         for agent_id in range(self.num_agents):
             self.actor_buffer[agent_id].obs[0] = obs[:, agent_id].copy()
             if self.actor_buffer[agent_id].available_actions is not None:
+                act_dim = self.actor_buffer[agent_id].available_actions.shape[-1]
                 self.actor_buffer[agent_id].available_actions[0] = available_actions[
-                    :, agent_id
+                    :, agent_id, :act_dim
                 ].copy()
         if self.state_type == "EP":
             self.critic_buffer.share_obs[0] = share_obs[:, 0].copy()
@@ -433,6 +434,13 @@ class OnPolicyBaseRunner:
             )
 
         for agent_id in range(self.num_agents):
+            avail = None
+            if available_actions is not None and available_actions[0] is not None:
+                action_space = self.envs.action_space[agent_id]
+                if action_space.__class__.__name__ == "Discrete":
+                    avail = available_actions[:, agent_id, :action_space.n]
+                else:
+                    avail = available_actions[:, agent_id]
             self.actor_buffer[agent_id].insert(
                 obs[:, agent_id],
                 rnn_states[:, agent_id],
@@ -440,9 +448,7 @@ class OnPolicyBaseRunner:
                 action_log_probs[:, agent_id],
                 masks[:, agent_id],
                 active_masks[:, agent_id],
-                available_actions[:, agent_id]
-                if available_actions[0] is not None
-                else None,
+                avail,
             )
 
         if self.state_type == "EP":
@@ -521,13 +527,23 @@ class OnPolicyBaseRunner:
         while True:
             eval_actions_collector = []
             for agent_id in range(self.num_agents):
+                action_space = self.envs.action_space[agent_id]
+                eval_avail = None
+                if (
+                    eval_available_actions is not None
+                    and eval_available_actions[0] is not None
+                ):
+                    if action_space.__class__.__name__ == "Discrete":
+                        eval_avail = eval_available_actions[
+                            :, agent_id, :action_space.n
+                        ]
+                    else:
+                        eval_avail = eval_available_actions[:, agent_id]
                 eval_actions, temp_rnn_state = self.actor[agent_id].act(
                     eval_obs[:, agent_id],
                     eval_rnn_states[:, agent_id],
                     eval_masks[:, agent_id],
-                    eval_available_actions[:, agent_id]
-                    if eval_available_actions[0] is not None
-                    else None,
+                    eval_avail,
                     deterministic=True,
                 )
                 eval_rnn_states[:, agent_id] = _t2n(temp_rnn_state)
@@ -620,13 +636,14 @@ class OnPolicyBaseRunner:
                 while True:
                     eval_actions_collector = []
                     for agent_id in range(self.num_agents):
+                        eval_avail = None
+                        if eval_available_actions is not None:
+                            eval_avail = eval_available_actions[:, agent_id]
                         eval_actions, temp_rnn_state = self.actor[agent_id].act(
                             eval_obs[:, agent_id],
                             eval_rnn_states[:, agent_id],
                             eval_masks[:, agent_id],
-                            eval_available_actions[:, agent_id]
-                            if eval_available_actions is not None
-                            else None,
+                            eval_avail,
                             deterministic=True,
                         )
                         eval_rnn_states[:, agent_id] = _t2n(temp_rnn_state)
@@ -675,13 +692,17 @@ class OnPolicyBaseRunner:
                 while True:
                     eval_actions_collector = []
                     for agent_id in range(self.num_agents):
+                        eval_avail = None
+                        if (
+                            eval_available_actions is not None
+                            and eval_available_actions[0] is not None
+                        ):
+                            eval_avail = eval_available_actions[:, agent_id]
                         eval_actions, temp_rnn_state = self.actor[agent_id].act(
                             eval_obs[:, agent_id],
                             eval_rnn_states[:, agent_id],
                             eval_masks[:, agent_id],
-                            eval_available_actions[:, agent_id]
-                            if eval_available_actions[0] is not None
-                            else None,
+                            eval_avail,
                             deterministic=True,
                         )
                         eval_rnn_states[:, agent_id] = _t2n(temp_rnn_state)

@@ -66,6 +66,10 @@ def get_task_name(env, env_args):
         task = env_args["task"]
     elif env == "lag":
         task = f"{env_args['scenario']}-{env_args['task']}"
+    elif env == "lima_transporte":
+        task = env_args.get("task", "extorsion_detection")
+    else:
+        task = env_args.get("task", env)
     return task
 
 

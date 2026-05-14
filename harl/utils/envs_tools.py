@@ -93,6 +93,10 @@ def make_train_env(env_name, seed, n_threads, env_args):
                 from harl.envs.lag.lag_env import LAGEnv
 
                 env = LAGEnv(env_args)
+            elif env_name == "lima_transporte":
+                from harl.envs.lima_transporte.harl_wrapper import LimaHARLWrapper
+
+                env = LimaHARLWrapper(env_args)
             else:
                 print("Can not support the " + env_name + "environment.")
                 raise NotImplementedError
@@ -146,6 +150,10 @@ def make_eval_env(env_name, seed, n_threads, env_args):
                 from harl.envs.lag.lag_env import LAGEnv
 
                 env = LAGEnv(env_args)
+            elif env_name == "lima_transporte":
+                from harl.envs.lima_transporte.harl_wrapper import LimaHARLWrapper
+
+                env = LimaHARLWrapper(env_args)
             else:
                 print("Can not support the " + env_name + "environment.")
                 raise NotImplementedError
@@ -257,3 +265,5 @@ def get_num_agents(env, env_args, envs):
         return envs.n_agents
     elif env == "lag":
         return envs.n_agents
+    elif env == "lima_transporte":
+        return 3

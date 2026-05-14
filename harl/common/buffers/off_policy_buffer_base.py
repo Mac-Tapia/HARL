@@ -119,12 +119,13 @@ class OffPolicyBufferBase:
                     agent_id
                 ].copy()
                 if self.act_spaces[agent_id].__class__.__name__ == "Discrete":
+                    action_n = self.act_spaces[agent_id].n
                     self.available_actions[agent_id][s:e] = available_actions[
                         agent_id
-                    ].copy()
+                    ][..., :action_n].copy()
                     self.next_available_actions[agent_id][s:e] = next_available_actions[
                         agent_id
-                    ].copy()
+                    ][..., :action_n].copy()
                 self.next_obs[agent_id][s:e] = next_obs[agent_id].copy()
         else:  # overflow
             len1 = self.buffer_size - self.idx  # length of first segment
@@ -145,12 +146,13 @@ class OffPolicyBufferBase:
                     0:len1
                 ].copy()
                 if self.act_spaces[agent_id].__class__.__name__ == "Discrete":
+                    action_n = self.act_spaces[agent_id].n
                     self.available_actions[agent_id][s:e] = available_actions[agent_id][
-                        0:len1
+                        0:len1, ..., :action_n
                     ].copy()
                     self.next_available_actions[agent_id][s:e] = next_available_actions[
                         agent_id
-                    ][0:len1].copy()
+                    ][0:len1, ..., :action_n].copy()
                 self.next_obs[agent_id][s:e] = next_obs[agent_id][0:len1].copy()
 
             # insert second segment
@@ -168,12 +170,13 @@ class OffPolicyBufferBase:
                     len1:length
                 ].copy()
                 if self.act_spaces[agent_id].__class__.__name__ == "Discrete":
+                    action_n = self.act_spaces[agent_id].n
                     self.available_actions[agent_id][s:e] = available_actions[agent_id][
-                        len1:length
+                        len1:length, ..., :action_n
                     ].copy()
                     self.next_available_actions[agent_id][s:e] = next_available_actions[
                         agent_id
-                    ][len1:length].copy()
+                    ][len1:length, ..., :action_n].copy()
                 self.next_obs[agent_id][s:e] = next_obs[agent_id][len1:length].copy()
 
         self.idx = (self.idx + length) % self.buffer_size  # update index

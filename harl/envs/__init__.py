@@ -11,6 +11,11 @@ from harl.envs.lag.lag_logger import LAGLogger
 FLAGS = flags.FLAGS
 FLAGS(["train_sc.py"])
 
+try:
+    from harl.envs.lima_transporte.lima_harl_logger import LimaTransporteLogger as _LimaLogger
+except ImportError:
+    _LimaLogger = None
+
 LOGGER_REGISTRY = {
     "smac": SMACLogger,
     "mamujoco": MAMuJoCoLogger,
@@ -20,4 +25,5 @@ LOGGER_REGISTRY = {
     "dexhands": DexHandsLogger,
     "smacv2": SMACv2Logger,
     "lag": LAGLogger,
+    "lima_transporte": _LimaLogger,
 }

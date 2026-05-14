@@ -1,0 +1,85 @@
+{
+    "main_args": {
+        "algo": "haa2c",
+        "env": "lima_transporte",
+        "exp_name": "madrl_lima_2026",
+        "load_config": ""
+    },
+    "algo_args": {
+        "seed": {
+            "seed": 42,
+            "seed_specify": true
+        },
+        "device": {
+            "cuda": false,
+            "cuda_deterministic": true,
+            "torch_threads": 4
+        },
+        "model": {
+            "hidden_sizes": [256, 128],
+            "activation_func": "tanh",
+            "use_feature_normalization": true,
+            "use_recurrent_policy": false,
+            "use_naive_recurrent_policy": false,
+            "recurrent_n": 1,
+            "data_chunk_length": 10,
+            "lr": 5e-4,
+            "critic_lr": 1e-3,
+            "opti_eps": 1e-5,
+            "weight_decay": 0,
+            "gain": 0.01,
+            "std_x_coef": 1,
+            "std_y_coef": 0.5,
+            "initialization_method": "orthogonal_"
+        },
+        "algo": {
+            "action_aggregation": "prod",
+            "share_param": false,
+            "fixed_order": true,
+            "gamma": 0.99,
+            "gae_lambda": 0.95,
+            "use_gae": true,
+            "use_clipped_value_loss": false,
+            "use_huber_loss": true,
+            "huber_delta": 5.0,
+            "clip_param": 0.2,
+            "a2c_epoch": 1,
+            "actor_num_mini_batch": 1,
+            "critic_epoch": 5,
+            "critic_num_mini_batch": 4,
+            "entropy_coef": 0.1,
+            "value_loss_coef": 0.5,
+            "use_max_grad_norm": true,
+            "max_grad_norm": 0.5,
+            "use_policy_active_masks": true
+        },
+        "train": {
+            "n_rollout_threads": 1,
+            "num_env_steps": 336000,
+            "episode_length": 672,
+            "use_linear_lr_decay": true,
+            "use_valuenorm": true,
+            "use_proper_time_limits": true,
+            "log_interval": 10,
+            "eval_interval": 50,
+            "model_dir": null
+        },
+        "eval": {
+            "use_eval": false,
+            "n_eval_rollout_threads": 1,
+            "eval_episodes": 10
+        },
+        "render": {
+            "use_render": false,
+            "render_episodes": 5
+        },
+        "logger": {
+            "log_dir": "./results/harl"
+        }
+    },
+    "env_args": {
+        "max_steps": 672,
+        "data_dir": "data/processed",
+        "seed": 42
+    }
+}
