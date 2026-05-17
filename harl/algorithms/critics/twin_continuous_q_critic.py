@@ -4,7 +4,7 @@ from copy import deepcopy
 import torch
 from harl.models.value_function_models.continuous_q_net import ContinuousQNet
 from harl.utils.envs_tools import check
-from harl.utils.models_tools import update_linear_schedule
+from harl.utils.models_tools import make_optimizer, update_linear_schedule
 
 
 class TwinContinuousQCritic:
@@ -46,9 +46,10 @@ class TwinContinuousQCritic:
         critic_params = itertools.chain(
             self.critic.parameters(), self.critic2.parameters()
         )
-        self.critic_optimizer = torch.optim.Adam(
+        self.critic_optimizer = make_optimizer(
             critic_params,
             lr=self.critic_lr,
+            args=args,
         )
         self.turn_off_grad()
 

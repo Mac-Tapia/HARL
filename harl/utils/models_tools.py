@@ -87,6 +87,42 @@ def update_linear_schedule(optimizer, epoch, total_num_epochs, initial_lr):
         param_group["lr"] = learning_rate
 
 
+def make_optimizer(parameters, lr, args=None, eps=None, weight_decay=None):
+    """Build optimizer from HARL config.
+
+    Defaults preserve the original Adam behavior. Lima configs can opt into
+    AdamW+AMSGrad for decoupled regularization and safer adaptive moments.
+    """
+    args = args or {}
+    optimizer_type = str(args.get("optimizer_type", "adam")).lower()
+    opt_eps = float(args.get("opti_eps", eps if eps is not None else 1e-5))
+    opt_weight_decay = float(
+        args.get("weight_decay", weight_decay if weight_decay is not None else 0.0)
+    )
+    amsgrad = bool(args.get("amsgrad", False))
+    betas = tuple(args.get("adam_betas", (0.9, 0.999)))
+
+    if optimizer_type == "adamw":
+        return torch.optim.AdamW(
+            parameters,
+            lr=lr,
+            eps=opt_eps,
+            weight_decay=opt_weight_decay,
+            amsgrad=amsgrad,
+            betas=betas,
+        )
+    if optimizer_type == "adam":
+        return torch.optim.Adam(
+            parameters,
+            lr=lr,
+            eps=opt_eps,
+            weight_decay=opt_weight_decay,
+            amsgrad=amsgrad,
+            betas=betas,
+        )
+    raise ValueError(f"optimizer_type no soportado: {optimizer_type}")
+
+
 def init(module, weight_init, bias_init, gain=1):
     """Init module.
     Args:

@@ -3,7 +3,7 @@ from copy import deepcopy
 import torch
 from harl.models.value_function_models.continuous_q_net import ContinuousQNet
 from harl.utils.envs_tools import check
-from harl.utils.models_tools import update_linear_schedule
+from harl.utils.models_tools import make_optimizer, update_linear_schedule
 
 
 class ContinuousQCritic:
@@ -37,8 +37,8 @@ class ContinuousQCritic:
         self.critic_lr = args["critic_lr"]
         self.polyak = args["polyak"]
         self.use_proper_time_limits = args["use_proper_time_limits"]
-        self.critic_optimizer = torch.optim.Adam(
-            self.critic.parameters(), lr=self.critic_lr
+        self.critic_optimizer = make_optimizer(
+            self.critic.parameters(), lr=self.critic_lr, args=args
         )
         self.turn_off_grad()
 

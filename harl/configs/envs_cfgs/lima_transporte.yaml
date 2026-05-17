@@ -6,3 +6,7 @@ dataset_source: data/processed/super_dataset_madrl.csv
 action_mode: continuous
 seed: 42
 state_type: EP
+dataset_split: train
+causal_obs: false
+reward_mode: team_mean
+communication_mode: ctde_message

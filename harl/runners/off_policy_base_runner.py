@@ -14,7 +14,7 @@ from harl.utils.envs_tools import (
     set_seed,
     get_num_agents,
 )
-from harl.utils.models_tools import init_device
+from harl.utils.models_tools import init_device, make_optimizer
 from harl.utils.configs_tools import init_dir, save_config, get_task_name
 from harl.algorithms.actors import ALGO_REGISTRY
 from harl.algorithms.critics import CRITIC_REGISTRY
@@ -198,8 +198,10 @@ class OffPolicyBaseRunner:
                 _log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
                 self.log_alpha.append(_log_alpha)
                 self.alpha_optimizer.append(
-                    torch.optim.Adam(
-                        [_log_alpha], lr=self.algo_args["algo"]["alpha_lr"]
+                    make_optimizer(
+                        [_log_alpha],
+                        lr=self.algo_args["algo"]["alpha_lr"],
+                        args=self.algo_args["algo"],
                     )
                 )
                 self.alpha.append(torch.exp(_log_alpha.detach()))

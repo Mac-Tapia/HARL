@@ -4,6 +4,7 @@ import torch.nn as nn
 from harl.utils.models_tools import (
     get_grad_norm,
     huber_loss,
+    make_optimizer,
     mse_loss,
     update_linear_schedule,
 )
@@ -44,9 +45,10 @@ class VCritic:
 
         self.critic = VNet(args, self.share_obs_space, self.device)
 
-        self.critic_optimizer = torch.optim.Adam(
+        self.critic_optimizer = make_optimizer(
             self.critic.parameters(),
             lr=self.critic_lr,
+            args=args,
             eps=self.opti_eps,
             weight_decay=self.weight_decay,
         )

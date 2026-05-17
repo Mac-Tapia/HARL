@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 from harl.algorithms.critics.twin_continuous_q_critic import TwinContinuousQCritic
 from harl.utils.envs_tools import check
+from harl.utils.models_tools import make_optimizer
 
 
 class SoftTwinContinuousQCritic(TwinContinuousQCritic):
@@ -32,8 +33,8 @@ class SoftTwinContinuousQCritic(TwinContinuousQCritic):
         self.auto_alpha = args["auto_alpha"]
         if self.auto_alpha:
             self.log_alpha = torch.zeros(1, requires_grad=True, device=device)
-            self.alpha_optimizer = torch.optim.Adam(
-                [self.log_alpha], lr=args["alpha_lr"]
+            self.alpha_optimizer = make_optimizer(
+                [self.log_alpha], lr=args["alpha_lr"], args=args
             )
             self.alpha = torch.exp(self.log_alpha.detach())
         else:

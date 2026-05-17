@@ -27,6 +27,8 @@ _TIMESERIES_HEADER = [
     "recompensa_buses_media", "recompensa_combis_media", "recompensa_mototaxis_media",
     "ataques_detectados_media", "ataques_no_detectados_media",
     "falsas_alarmas_media", "tasa_deteccion_media", "hom_prevenidos_media",
+    "ataques_alertados_modelo_media", "ataques_no_alertados_modelo_media",
+    "falsas_alarmas_modelo_media", "tasa_deteccion_modelo_media",
     "obj_deteccion_buses",  "obj_precision_buses",  "obj_gravedad_buses",
     "obj_deteccion_combis", "obj_precision_combis", "obj_gravedad_combis",
     "obj_deteccion_mototaxis", "obj_precision_mototaxis", "obj_gravedad_mototaxis",
@@ -43,6 +45,8 @@ _TRACE_HEADER = [
     "ataques_detectados", "ataques_no_detectados", "falsas_alarmas",
     "hom_prevenidos", "hom_no_detectados",
     "tasa_deteccion",
+    "ataques_alertados_modelo", "ataques_no_alertados_modelo",
+    "falsas_alarmas_modelo", "tasa_deteccion_modelo",
     "obj_deteccion_buses",  "obj_precision_buses",  "obj_gravedad_buses",
     "obj_deteccion_combis", "obj_precision_combis", "obj_gravedad_combis",
     "obj_deteccion_mototaxis", "obj_precision_mototaxis", "obj_gravedad_mototaxis",
@@ -152,6 +156,7 @@ class LimaTransporteLogger(BaseLogger):
                 ep_obj_snap  = np.zeros((self.num_agents, 3), dtype=np.float32)
                 rew_per_ag   = np.zeros(self.num_agents, dtype=np.float32)
                 atk_det_tot  = atk_nodet_tot = fp_tot = hom_prev_tot = hom_nodet_tot = 0
+                atk_model_tot = atk_nomodel_tot = fp_model_tot = 0
 
                 for ag_idx in range(self.num_agents):
                     try:
@@ -162,7 +167,10 @@ class LimaTransporteLogger(BaseLogger):
                         rew_per_ag[ag_idx]  = float(info.get("ep_reward", 0))
                         atk_det_tot  += int(info.get("ep_atk_detectados", 0))
                         atk_nodet_tot+= int(info.get("ep_atk_no_detec",   0))
+                        atk_model_tot += int(info.get("ep_atk_alertados_modelo", 0))
+                        atk_nomodel_tot += int(info.get("ep_atk_no_alertados_modelo", 0))
                         fp_tot       += int(info.get("ep_falsas",          0))
+                        fp_model_tot += int(info.get("ep_falsas_modelo",   0))
                         hom_prev_tot += int(info.get("ep_hom_detectados",  0))
                         hom_nodet_tot+= int(info.get("ep_hom_no_detec",    0))
                     except (IndexError, TypeError, AttributeError):
@@ -173,6 +181,10 @@ class LimaTransporteLogger(BaseLogger):
 
                 total_atk = atk_det_tot + atk_nodet_tot
                 tasa = atk_det_tot / total_atk if total_atk > 0 else 0.0
+                total_atk_modelo = atk_model_tot + atk_nomodel_tot
+                tasa_modelo = (
+                    atk_model_tot / total_atk_modelo if total_atk_modelo > 0 else 0.0
+                )
 
                 self._done_ep_stats.append({
                     "rew_total":   float(self.done_episodes_rewards[-1]),
@@ -183,6 +195,10 @@ class LimaTransporteLogger(BaseLogger):
                     "hom_prev":    hom_prev_tot,
                     "hom_nodet":   hom_nodet_tot,
                     "tasa":        tasa,
+                    "atk_model":   atk_model_tot,
+                    "atk_nomodel": atk_nomodel_tot,
+                    "fp_model":    fp_model_tot,
+                    "tasa_modelo": tasa_modelo,
                     "ep_obj":      ep_obj_snap.copy(),
                 })
 
@@ -276,6 +292,8 @@ class LimaTransporteLogger(BaseLogger):
                 stat["atk_det"], stat["atk_nodet"], stat["fp"],
                 stat["hom_prev"], stat["hom_nodet"],
                 round(stat["tasa"], 4),
+                stat["atk_model"], stat["atk_nomodel"], stat["fp_model"],
+                round(stat["tasa_modelo"], 4),
                 round(float(obj[0, 0]), 3), round(float(obj[0, 1]), 3), round(float(obj[0, 2]), 3),
                 round(float(obj[1, 0]) if self.num_agents > 1 else 0.0, 3),
                 round(float(obj[1, 1]) if self.num_agents > 1 else 0.0, 3),
@@ -294,8 +312,10 @@ class LimaTransporteLogger(BaseLogger):
             rew_arr    = np.array([s["rew_total"] for s in self._done_ep_stats])
             ag_rew_arr = np.array([s["rew_per_ag"] for s in self._done_ep_stats])
             ev_arr     = np.array([[s["atk_det"], s["atk_nodet"], s["fp"],
-                                    s["hom_prev"]] for s in self._done_ep_stats])
+                                    s["hom_prev"], s["atk_model"], s["atk_nomodel"],
+                                    s["fp_model"]] for s in self._done_ep_stats])
             tasa_arr   = np.array([s["tasa"] for s in self._done_ep_stats])
+            tasa_modelo_arr = np.array([s["tasa_modelo"] for s in self._done_ep_stats])
 
             ev_mean = ev_arr.mean(axis=0)
             ag_rew_mean = ag_rew_arr.mean(axis=0)
@@ -312,6 +332,8 @@ class LimaTransporteLogger(BaseLogger):
                 round(float(ev_mean[0]), 2), round(float(ev_mean[1]), 2),
                 round(float(ev_mean[2]), 2), round(float(tasa_arr.mean()), 4),
                 round(float(ev_mean[3]), 2),
+                round(float(ev_mean[4]), 2), round(float(ev_mean[5]), 2),
+                round(float(ev_mean[6]), 2), round(float(tasa_modelo_arr.mean()), 4),
                 round(float(obj_mean[0, 0]), 3), round(float(obj_mean[0, 1]), 3),
                 round(float(obj_mean[0, 2]), 3),
                 round(float(obj_mean[1, 0]) if self.num_agents > 1 else 0.0, 3),
@@ -378,6 +400,16 @@ class LimaTransporteLogger(BaseLogger):
         media_r50= float(last50["recompensa_total"].mean())
         std_r50  = float(last50["recompensa_total"].std(ddof=1)) if len(last50) > 1 else 0.0
         det_final= float(last50["tasa_deteccion"].mean())
+        det_modelo_final = (
+            float(last50["tasa_deteccion_modelo"].mean())
+            if "tasa_deteccion_modelo" in last50.columns
+            else det_final
+        )
+        fp_modelo_final = (
+            float(last50["falsas_alarmas_modelo"].mean())
+            if "falsas_alarmas_modelo" in last50.columns
+            else float(last50["falsas_alarmas"].mean())
+        )
 
         result = {
             "algoritmo": algo_key,
@@ -389,6 +421,8 @@ class LimaTransporteLogger(BaseLogger):
                 "media_r_ultimos50":   round(media_r50, 4),
                 "std_r_ultimos50":     round(std_r50,   4),
                 "tasa_deteccion_final":round(det_final, 4),
+                "tasa_deteccion_modelo_final": round(det_modelo_final, 4),
+                "falsas_alarmas_modelo_media_ultimos50": round(fp_modelo_final, 3),
                 "obj_deteccion_total": round(float(df_trace["obj_deteccion_total"].mean()), 3),
                 "obj_precision_total": round(float(df_trace["obj_precision_total"].mean()), 3),
                 "obj_gravedad_total":  round(float(df_trace["obj_gravedad_total"].mean()),  3),
@@ -417,6 +451,9 @@ class LimaTransporteLogger(BaseLogger):
                 "reward_combis":  round(float(row["recompensa_combis"]),  4),
                 "reward_mototaxis": round(float(row["recompensa_mototaxis"]), 4),
                 "tasa_deteccion": round(float(row["tasa_deteccion"]), 4),
+                "tasa_deteccion_modelo": round(
+                    float(row.get("tasa_deteccion_modelo", row["tasa_deteccion"])), 4
+                ),
             })
         hist_path = tables_dir / "training_history.json"
         hist_path.write_text(
@@ -435,6 +472,18 @@ class LimaTransporteLogger(BaseLogger):
             "ataques_no_detectados_total": df_trace["ataques_no_detectados"],
             "falsas_alarmas_total":      df_trace["falsas_alarmas"],
             "tasa_deteccion":            df_trace["tasa_deteccion"],
+            "ataques_alertados_modelo_total": df_trace.get(
+                "ataques_alertados_modelo", df_trace["ataques_detectados"]
+            ),
+            "ataques_no_alertados_modelo_total": df_trace.get(
+                "ataques_no_alertados_modelo", df_trace["ataques_no_detectados"]
+            ),
+            "falsas_alarmas_modelo_total": df_trace.get(
+                "falsas_alarmas_modelo", df_trace["falsas_alarmas"]
+            ),
+            "tasa_deteccion_modelo": df_trace.get(
+                "tasa_deteccion_modelo", df_trace["tasa_deteccion"]
+            ),
             "loss_critico":              0.0,    # se rellena desde timeseries si disponible
             "tiempo_ep_seg":             0.0,
             "obj_deteccion_total":       df_trace["obj_deteccion_total"],

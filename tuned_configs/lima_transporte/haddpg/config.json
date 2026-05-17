@@ -20,23 +20,27 @@
             "activation_func": "relu",
             "final_activation_func": "tanh",
             "lr": 3e-4,
-            "critic_lr": 1e-3
+            "critic_lr": 1e-3,
+            "opti_eps": 1e-5,
+            "weight_decay": 1e-4,
+            "optimizer_type": "adamw",
+            "amsgrad": true
         },
         "algo": {
             "share_param": false,
             "fixed_order": true,
             "gamma": 0.99,
-            "buffer_size": 100000,
+            "buffer_size": 200000,
             "batch_size": 256,
             "polyak": 0.005,
-            "expl_noise": 0.2,
+            "expl_noise": 0.08,
             "n_step": 3
         },
         "train": {
             "n_rollout_threads": 1,
             "num_env_steps": 336000,
-            "warmup_steps": 500,
-            "train_interval": 50,
+            "warmup_steps": 1000,
+            "train_interval": 20,
             "update_per_train": 1,
             "log_interval": null,
             "eval_interval": 5000,

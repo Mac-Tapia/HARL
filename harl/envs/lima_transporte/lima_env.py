@@ -8,7 +8,8 @@ Tres agentes heterogéneos cooperativos bajo paradigma CTDE:
   - combis:    observa rutas informales (Comas, SMP, Los Olivos)
   - mototaxis: observa zonas periféricas (VES, SJL, Puente Piedra)
 
-Cada agente decide si emitir alerta y con qué nivel de severidad.
+Cada agente decide si emitir alerta, con qué severidad, y cómo priorizar
+apoyo, despacho, cobertura y coordinación entre ejes.
 El crítico centralizado observa el estado global de los 3 agentes.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -32,7 +33,7 @@ ESPACIO DE OBSERVACIÓN — OBS_DIM = 19
 
   Contexto de extorsión:
   [12] extorsion_rel   — ataque relacionado con extorsión ∈ {0,1}
-  [13] monto_cupo_n    — monto cupo normalizado ∈ [0,1]  (máx ≈ 5000 soles)
+  [13] monto_cupo_n    — monto cupo normalizado ∈ [0,1]  (máx=100000 soles)
   [14] tipo_ext_n      — tipo extorsión normalizado ∈ [0,1]
                          0=no_id, 0.2=amenaza, 0.4=extorsion_gral,
                          0.6=cobro_cupo, 0.8=represalia, 1.0=atentado
@@ -53,16 +54,19 @@ ESPACIO DE OBSERVACIÓN — OBS_DIM = 19
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ESPACIO DE ACCIÓN — continuo por rol operativo
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Cada agente usa Box([-1, -1, -1], [1, 1, 1]):
-    a[0] intensidad_alerta : <=0 no alerta, >0 emite alerta
-    a[1] severidad         : continuo reescalado a severidad 1..3 si hay alerta
-    a[2] accion_auxiliar   : >0 activa apoyo/vigilancia/maniobra auxiliar
+  Cada agente usa Box([-1]*6, [1]*6):
+    a[0] intensidad_alerta     : <=0 no alerta, >0 emite alerta
+    a[1] severidad             : continuo reescalado a severidad 1..3 si hay alerta
+    a[2] accion_auxiliar       : >0 activa apoyo/vigilancia/maniobra auxiliar
+    a[3] prioridad_despacho    : [-1,1] -> [0,1] urgencia operativa del recurso
+    a[4] cobertura_zonal       : [-1,1] redistribuye cobertura territorial
+    a[5] coordinacion_intereje : [-1,1] solicita apoyo de otro eje/modalidad
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RECOMPENSA MULTI-OBJETIVO — R ∈ ℝ³  (calibrada a datos Lima MP 2026)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   obj[0] — Detección : TP=+5.0, FN=-3.0   ratio FP:FN = 1:6
-  obj[1] — Precisión : TN=+0.2, FP=-0.5   penaliza falsas alarmas
+  obj[1] — Precisión : TN=+0.2, FP=-0.9   penaliza falsas alarmas
   obj[2] — Gravedad  : homicidio +10/-10   escala costo real del evento letal
 
   Ratio FP:FN = 1:6 (cyber-defense literature, arXiv:2410.17351)
@@ -95,21 +99,22 @@ from gymnasium import spaces
 AGENTES   = ["buses", "combis", "mototaxis"]
 N_ZONAS   = 24
 OBS_DIM   = 19   # Ver docstring: contexto(9) + gravedad(3) + extorsion(3) + modus(1) + victima(3)
-ACTION_DIM = 3
+ACTION_DIM = 6
 ACT_DIM   = {ag: ACTION_DIM for ag in AGENTES}
 ACTION_LOW = -1.0
 ACTION_HIGH = 1.0
+NON_CAUSAL_OBS_IDX = (9, 10, 11, 16, 17, 18)
 
 # ── Recompensa Multi-Objetivo  R ∈ ℝ³ = [deteccion, precision, gravedad] ─────
 # Calibrada a datos Lima MP 2026 y literatura MARL de ciberseguridad:
 #   ratio FP:FN = 1:6  (arXiv:2410.17351 — cyber defense)
-#   escala TP homicidio = 2× vs ataque  (costo de vida > costo recurso)
+#   término de gravedad homicidio = ±10  (costo de vida > costo recurso)
 #
 #         evento              [deteccion, precision, gravedad]
 RECOMPENSAS_MO = {
     "homicidio_prevenido":    np.array([+5.0,  0.0, +10.0]),  # TP + homicidio
     "ataque_prevenido":       np.array([+5.0,  0.0,   0.0]),  # TP sin homicidio
-    "falsa_alarma":           np.array([ 0.0, -0.5,   0.0]),  # FP  (ratio 1:6 vs FN)
+    "falsa_alarma":           np.array([ 0.0, -0.9,   0.0]),  # FP: penalidad reforzada anti-sobreactuacion
     "homicidio_no_detectado": np.array([-3.0,  0.0, -10.0]),  # FN + homicidio
     "ataque_no_detectado":    np.array([-3.0,  0.0,   0.0]),  # FN sin homicidio
     "silencio_ok":            np.array([ 0.0, +0.2,   0.0]),  # TN correcto
@@ -156,6 +161,11 @@ class LimaTransporteEnv(AECEnv):
         Pasos por episodio (default 672 = 28 días × 24 horas).
     data_dir : str
         Directorio con los datasets procesados.
+    dataset_split : str
+        Split a cargar: "train" para entrenamiento o "val" para evaluacion holdout.
+    causal_obs : bool
+        Si True, elimina variables post-evento que no existen antes de decidir
+        una alerta real: homicidio, herido, arma y perfil de victima.
     seed : int
         Semilla para reproducibilidad.
     render_mode : str | None
@@ -172,12 +182,18 @@ class LimaTransporteEnv(AECEnv):
         self,
         max_steps: int = 672,
         data_dir: str = "data/processed",
+        dataset_split: str = "train",
+        causal_obs: bool = False,
         seed: int = 42,
         render_mode: Optional[str] = None,
     ):
         super().__init__()
         self.max_steps    = max_steps
         self.data_dir     = Path(data_dir)
+        self.dataset_split = str(dataset_split or "train").lower().strip()
+        if self.dataset_split not in {"train", "val"}:
+            raise ValueError("dataset_split debe ser 'train' o 'val'")
+        self.causal_obs   = bool(causal_obs)
         self.seed_val     = seed
         self.render_mode  = render_mode
         self._rng         = np.random.default_rng(seed)
@@ -209,7 +225,9 @@ class LimaTransporteEnv(AECEnv):
             for ag in self.possible_agents
         }
 
-        # Espacios de acción continuos: [alerta, severidad, accion_auxiliar]
+        # Espacios de acción continuos:
+        # [alerta, severidad, apoyo_auxiliar, prioridad_despacho,
+        #  cobertura_zonal, coordinacion_intereje]
         self.action_spaces = {
             ag: spaces.Box(
                 low=ACTION_LOW,
@@ -240,7 +258,20 @@ class LimaTransporteEnv(AECEnv):
         self._ep_homicidios_no_detectados = {ag: 0 for ag in AGENTES}
         self._ep_ataques_detectados   = {ag: 0 for ag in AGENTES}
         self._ep_ataques_no_detectados = {ag: 0 for ag in AGENTES}
+        self._ep_ataques_alertados_modelo = {ag: 0 for ag in AGENTES}
+        self._ep_ataques_no_alertados_modelo = {ag: 0 for ag in AGENTES}
+        self._ep_homicidios_alertados_modelo = {ag: 0 for ag in AGENTES}
         self._ep_falsas_alarmas = {ag: 0 for ag in AGENTES}
+        self._ep_falsas_alarmas_modelo = {ag: 0 for ag in AGENTES}
+        self._ep_alertas_emitidas = {ag: 0 for ag in AGENTES}
+        self._ep_alertas_efectivas = {ag: 0 for ag in AGENTES}
+        self._ep_compliance_fallos = {ag: 0 for ag in AGENTES}
+        self._ep_prioridad_despacho_sum = {ag: 0.0 for ag in AGENTES}
+        self._ep_cobertura_zonal_abs_sum = {ag: 0.0 for ag in AGENTES}
+        self._ep_coord_intereje_sum = {ag: 0.0 for ag in AGENTES}
+        self._ep_despachos_priorizados = {ag: 0 for ag in AGENTES}
+        self._ep_redistribuciones_cobertura = {ag: 0 for ag in AGENTES}
+        self._ep_solicitudes_intereje = {ag: 0 for ag in AGENTES}
         # Acumuladores por objetivo (multi-objetivo)
         self._ep_obj = {ag: np.zeros(N_OBJETIVOS) for ag in AGENTES}
         # Última recompensa vectorial por agente
@@ -254,7 +285,7 @@ class LimaTransporteEnv(AECEnv):
         datos = {}
         for ag in AGENTES:
             modalidad = ag  # buses, combis, mototaxis
-            path_clean = self.data_dir / f"dataset_{modalidad}_train.csv"
+            path_clean = self.data_dir / f"dataset_{modalidad}_{self.dataset_split}.csv"
             if not path_clean.exists():
                 raise FileNotFoundError(
                     f"No se encontró el dataset requerido: {path_clean}. "
@@ -287,6 +318,12 @@ class LimaTransporteEnv(AECEnv):
 
     # ── API PettingZoo AEC ─────────────────────────────────────────────────
 
+    def observation_space(self, agent: str):
+        return self.observation_spaces[agent]
+
+    def action_space(self, agent: str):
+        return self.action_spaces[agent]
+
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):
         if seed is not None:
             self._rng = np.random.default_rng(seed)
@@ -306,6 +343,7 @@ class LimaTransporteEnv(AECEnv):
 
         # Inicializar buffers PettingZoo
         self.rewards      = {ag: 0.0  for ag in self.agents}
+        self._cumulative_rewards = {ag: 0.0 for ag in self.agents}
         self.terminations = {ag: False for ag in self.agents}
         self.truncations  = {ag: False for ag in self.agents}
         self.infos        = {ag: {}    for ag in self.agents}
@@ -316,7 +354,20 @@ class LimaTransporteEnv(AECEnv):
         self._ep_homicidios_no_detectados = {ag: 0 for ag in AGENTES}
         self._ep_ataques_detectados    = {ag: 0   for ag in AGENTES}
         self._ep_ataques_no_detectados = {ag: 0   for ag in AGENTES}
+        self._ep_ataques_alertados_modelo = {ag: 0 for ag in AGENTES}
+        self._ep_ataques_no_alertados_modelo = {ag: 0 for ag in AGENTES}
+        self._ep_homicidios_alertados_modelo = {ag: 0 for ag in AGENTES}
         self._ep_falsas_alarmas        = {ag: 0   for ag in AGENTES}
+        self._ep_falsas_alarmas_modelo = {ag: 0 for ag in AGENTES}
+        self._ep_alertas_emitidas      = {ag: 0   for ag in AGENTES}
+        self._ep_alertas_efectivas     = {ag: 0   for ag in AGENTES}
+        self._ep_compliance_fallos     = {ag: 0   for ag in AGENTES}
+        self._ep_prioridad_despacho_sum = {ag: 0.0 for ag in AGENTES}
+        self._ep_cobertura_zonal_abs_sum = {ag: 0.0 for ag in AGENTES}
+        self._ep_coord_intereje_sum = {ag: 0.0 for ag in AGENTES}
+        self._ep_despachos_priorizados = {ag: 0 for ag in AGENTES}
+        self._ep_redistribuciones_cobertura = {ag: 0 for ag in AGENTES}
+        self._ep_solicitudes_intereje = {ag: 0 for ag in AGENTES}
         self._ep_obj = {ag: np.zeros(N_OBJETIVOS) for ag in AGENTES}
         self.reward_vectors = {ag: np.zeros(N_OBJETIVOS) for ag in AGENTES}
 
@@ -377,7 +428,7 @@ class LimaTransporteEnv(AECEnv):
         edad_n  = float(fila.get("victima_edad_n",   0.0))
         menor   = float(fila.get("victima_menor_edad", 0))
 
-        return np.array(
+        obs = np.array(
             [zona_n, hora_sin, hora_cos, dia_sin, dia_cos,
              hist_n, alerta_p, riesgo, flag_visual,
              homicidio, herido, arma_n,
@@ -386,11 +437,15 @@ class LimaTransporteEnv(AECEnv):
              sexo_n, edad_n, menor],
             dtype=np.float32,
         )
+        if self.causal_obs:
+            obs[list(NON_CAUSAL_OBS_IDX)] = 0.0
+        return obs
 
-    def _interpretar_accion(self, agente: str, accion) -> tuple[int, int, int]:
+    def _interpretar_accion(self, agente: str, accion) -> tuple[int, int, int, float, float, float]:
         """
-        Interpreta acción continua Box(3) y devuelve:
-        (alerta: 0/1, severidad: 0-3, accion_extra: 0/1).
+        Interpreta acción continua Box(6) y devuelve:
+        (alerta, severidad, apoyo_auxiliar, prioridad_despacho,
+         cobertura_zonal, coordinacion_intereje).
         """
         arr = np.asarray(accion, dtype=np.float32).reshape(-1)
         if arr.size < ACTION_DIM:
@@ -404,7 +459,20 @@ class LimaTransporteEnv(AECEnv):
         else:
             severidad = 0
         extra = int(float(arr[2]) > 0.0)
-        return alerta, severidad, extra
+        prioridad_despacho = float((arr[3] + 1.0) / 2.0)
+        cobertura_zonal = float(arr[4])
+        coordinacion_intereje = float(arr[5])
+        if alerta == 0:
+            prioridad_despacho *= 0.25
+            coordinacion_intereje = min(coordinacion_intereje, 0.0)
+        return (
+            alerta,
+            severidad,
+            extra,
+            prioridad_despacho,
+            cobertura_zonal,
+            coordinacion_intereje,
+        )
 
     def _calcular_recompensa(
         self, agente: str, alerta: int, ataque_ocurrido: int, homicidio: int
@@ -424,6 +492,34 @@ class LimaTransporteEnv(AECEnv):
         else:
             return r["silencio_ok"].copy()
 
+    def _calcular_recompensa_decision(
+        self,
+        agente: str,
+        alerta: int,
+        alerta_efectiva: int,
+        ataque_ocurrido: int,
+        homicidio: int,
+    ) -> np.ndarray:
+        """
+        Recompensa desacoplada para tesis/operación real.
+
+        La detección y precisión miden la decisión de la IA. La gravedad mide
+        el resultado operativo efectivo después del cumplimiento humano (HITL).
+        Esto evita castigar al actor por fallas externas de ejecución, pero
+        conserva el costo físico si una alerta correcta no se ejecuta.
+        """
+        reward_vec = np.zeros(N_OBJETIVOS, dtype=np.float32)
+
+        if ataque_ocurrido == 1:
+            reward_vec[0] += 5.0 if alerta == 1 else -3.0
+        else:
+            reward_vec[1] += -0.9 if alerta == 1 else 0.2
+
+        if homicidio == 1:
+            reward_vec[2] += 10.0 if alerta_efectiva == 1 else -10.0
+
+        return reward_vec
+
     def _escalarizar(self, agente: str, reward_vec: np.ndarray) -> float:
         """Escalarización lineal ponderada: r = w_agente · R."""
         return float(np.dot(PESOS_AGENTE[agente], reward_vec))
@@ -438,6 +534,9 @@ class LimaTransporteEnv(AECEnv):
             self._was_dead_step(action)
             return
 
+        self._clear_rewards()
+        self._cumulative_rewards[agente] = 0.0
+
         # Obtener dato real del episodio
         df  = self._datos[agente]
         idx = self._indice[agente] % len(df)
@@ -447,7 +546,17 @@ class LimaTransporteEnv(AECEnv):
         zona_id = int(fila.get("zona_id", 0))
 
         # Interpretar acción
-        alerta, severidad, extra = self._interpretar_accion(agente, action)
+        (
+            alerta,
+            severidad,
+            extra,
+            prioridad_despacho,
+            cobertura_zonal,
+            coordinacion_intereje,
+        ) = self._interpretar_accion(agente, action)
+        redistribuye_cobertura = int(abs(cobertura_zonal) > 0.33)
+        solicita_apoyo_intereje = int(coordinacion_intereje > 0.33)
+        despacho_priorizado = int(alerta == 1 and prioridad_despacho > 0.66)
 
         # HITL: Factor Humano (Tasa de Cumplimiento / Compliance Rate)
         # Meyer (2004) -> Buses 85%; Bliss (2003) -> Combis/Mototaxis 60%
@@ -456,22 +565,19 @@ class LimaTransporteEnv(AECEnv):
         alerta_efectiva = 0
         _compliance_fallo = False
         if alerta == 1:
+            self._ep_alertas_emitidas[agente] += 1
             if self._rng.random() <= compliance_rate:
                 alerta_efectiva = 1
+                self._ep_alertas_efectivas[agente] += 1
             else:
                 _compliance_fallo = True  # humano no cumplio — fallo externo al agente
+                self._ep_compliance_fallos[agente] += 1
 
-        # Calcular recompensa base vectorial
-        reward_vec = self._calcular_recompensa(agente, alerta_efectiva, ataque_ocurrido, homicidio)
-
-        # Correccion de atribucion de credito (Credit Assignment Correction):
-        # Si el agente intento alertar correctamente en un ataque pero el humano
-        # no cumplio, la penalizacion FN no es responsabilidad del agente.
-        # Se neutraliza a cero para que el gradiente refleje la decision del agente,
-        # no el ruido estocastico del cumplimiento humano.
-        # (Ref: stochastic action execution credit assignment — RL theory)
-        if _compliance_fallo and ataque_ocurrido == 1:
-            reward_vec = np.zeros(N_OBJETIVOS, dtype=np.float32)
+        # Calcular recompensa base vectorial. Deteccion/precision se atribuyen
+        # a la decision del modelo; gravedad se atribuye al resultado efectivo.
+        reward_vec = self._calcular_recompensa_decision(
+            agente, alerta, alerta_efectiva, ataque_ocurrido, homicidio
+        )
 
         riesgo = float(fila.get("riesgo_zona", 0.5))
 
@@ -484,8 +590,8 @@ class LimaTransporteEnv(AECEnv):
         # tiene mas control sobre sus FPs); combis/mototaxis mas suave (compliance menor,
         # menor control sobre outcome efectivo).
         _MAX_CRY_WOLF = 8
-        _CRY_WOLF_RATE = {"buses": 0.50, "combis": 0.25, "mototaxis": 0.30}
-        if alerta_efectiva == 1 and ataque_ocurrido == 0:
+        _CRY_WOLF_RATE = {"buses": 0.75, "combis": 0.45, "mototaxis": 0.50}
+        if alerta == 1 and ataque_ocurrido == 0:
             self._fp_consecutivos[agente] = min(self._fp_consecutivos[agente] + 1, _MAX_CRY_WOLF)
             penalty_multiplier = 1.0 + (_CRY_WOLF_RATE[agente] * self._fp_consecutivos[agente])
             reward_vec *= penalty_multiplier
@@ -497,6 +603,37 @@ class LimaTransporteEnv(AECEnv):
         # Combis: corredores informales con alta heterogeneidad de rutas
         if extra == 1 and agente in ("mototaxis", "combis"):
             reward_vec[0] += 0.1 * riesgo
+
+        # Reward Shaping operativo Box(6): despacho, cobertura y coordinacion.
+        # Recompensa decisiones fisicamente interpretables cuando hay ataque,
+        # y penaliza consumo de recursos si se activan sobre falsas alarmas.
+        carga_operativa = (
+            0.45 * prioridad_despacho
+            + 0.25 * abs(cobertura_zonal)
+            + 0.30 * max(coordinacion_intereje, 0.0)
+        )
+        if alerta_efectiva == 1 and ataque_ocurrido == 1:
+            reward_vec[0] += 0.35 * prioridad_despacho * riesgo
+            reward_vec[0] += 0.15 * redistribuye_cobertura * riesgo
+            reward_vec[0] += 0.20 * solicita_apoyo_intereje * riesgo
+            if homicidio == 1:
+                reward_vec[2] += 0.75 * prioridad_despacho
+        elif alerta == 1 and ataque_ocurrido == 0:
+            reward_vec[1] -= 0.55 * carga_operativa
+            reward_vec[1] -= 0.12 * float(severidad)
+            if despacho_priorizado:
+                reward_vec[1] -= 0.35
+            if solicita_apoyo_intereje:
+                reward_vec[1] -= 0.25
+        elif alerta == 0 and carga_operativa > 0.35:
+            reward_vec[1] -= 0.15 * carga_operativa
+
+        self._ep_prioridad_despacho_sum[agente] += prioridad_despacho
+        self._ep_cobertura_zonal_abs_sum[agente] += abs(cobertura_zonal)
+        self._ep_coord_intereje_sum[agente] += max(coordinacion_intereje, 0.0)
+        self._ep_despachos_priorizados[agente] += despacho_priorizado
+        self._ep_redistribuciones_cobertura[agente] += redistribuye_cobertura
+        self._ep_solicitudes_intereje[agente] += solicita_apoyo_intereje
 
         # Escalarizar recompensa final
         reward = self._escalarizar(agente, reward_vec)
@@ -526,6 +663,15 @@ class LimaTransporteEnv(AECEnv):
         elif alerta_efectiva == 1 and ataque_ocurrido == 0:
             self._ep_falsas_alarmas[agente] += 1
 
+        if alerta == 1 and ataque_ocurrido == 1:
+            self._ep_ataques_alertados_modelo[agente] += 1
+        elif alerta == 0 and ataque_ocurrido == 1:
+            self._ep_ataques_no_alertados_modelo[agente] += 1
+        elif alerta == 1 and ataque_ocurrido == 0:
+            self._ep_falsas_alarmas_modelo[agente] += 1
+        if alerta == 1 and homicidio == 1:
+            self._ep_homicidios_alertados_modelo[agente] += 1
+
         # Actualizar estado
         self._alerta_previa[agente] = alerta
         self._indice[agente] += 1
@@ -546,21 +692,21 @@ class LimaTransporteEnv(AECEnv):
         # Actualizar observación (siempre, incluido el paso terminal)
         self._obs_buffer[agente] = self._get_obs(agente)
 
-        # Cuando el episodio termina, vaciar self.agents para
-        # que el bucle while env.agents: del train loop salga.
-        # IMPORTANTE: info se actualiza abajo ANTES de este return
-        # para que el wrapper pueda leer ep_obj_* en el paso terminal.
-        if done:
-            self.agents = []
-
         # Info
         self.infos[agente] = {
             "ataque_ocurrido":  ataque_ocurrido,
             "homicidio":        homicidio,
             "alerta_emitida":   alerta,  # Intención de la IA
             "alerta_efectiva":  alerta_efectiva, # Resultado tras el HITL
+            "compliance_fallo":  _compliance_fallo,
             "severidad":        severidad,
             "accion_extra":     extra,
+            "prioridad_despacho": prioridad_despacho,
+            "cobertura_zonal": cobertura_zonal,
+            "coordinacion_intereje": coordinacion_intereje,
+            "despacho_priorizado": despacho_priorizado,
+            "redistribuye_cobertura": redistribuye_cobertura,
+            "solicita_apoyo_intereje": solicita_apoyo_intereje,
             "paso":             self._paso_actual,
             "hora":             self._hora_actual,
             "ep_reward":        self._ep_recompensas[agente],
@@ -568,7 +714,14 @@ class LimaTransporteEnv(AECEnv):
             "ep_hom_no_detec":  self._ep_homicidios_no_detectados[agente],
             "ep_atk_detectados": self._ep_ataques_detectados[agente],
             "ep_atk_no_detec":  self._ep_ataques_no_detectados[agente],
+            "ep_atk_alertados_modelo": self._ep_ataques_alertados_modelo[agente],
+            "ep_atk_no_alertados_modelo": self._ep_ataques_no_alertados_modelo[agente],
+            "ep_hom_alertados_modelo": self._ep_homicidios_alertados_modelo[agente],
             "ep_falsas":        self._ep_falsas_alarmas[agente],
+            "ep_falsas_modelo": self._ep_falsas_alarmas_modelo[agente],
+            "ep_alertas_emitidas": self._ep_alertas_emitidas[agente],
+            "ep_alertas_efectivas": self._ep_alertas_efectivas[agente],
+            "ep_compliance_fallos": self._ep_compliance_fallos[agente],
             # Métricas de Equidad
             "ataques_por_zona": self._ep_ataques_por_zona.copy(),
             "detecciones_por_zona": self._ep_detecciones_por_zona.copy(),
@@ -579,6 +732,8 @@ class LimaTransporteEnv(AECEnv):
             "ep_obj_precision": float(self._ep_obj[agente][1]),
             "ep_obj_gravedad":  float(self._ep_obj[agente][2]),
         }
+
+        self._accumulate_rewards()
 
         if done:
             return
@@ -611,9 +766,7 @@ class LimaTransporteEnv(AECEnv):
 
     def _was_dead_step(self, action):
         """Maneja el paso cuando el agente ya terminó (compatibilidad PettingZoo)."""
-        if self.agent_selection not in self.agents:
-            return
-        self.agent_selection = self._selector.next()
+        return super()._was_dead_step(action)
 
     # ── Estado global (para el crítico centralizado HAPPO) ────────────────
 
@@ -632,7 +785,20 @@ class LimaTransporteEnv(AECEnv):
             "homicidios_no_detec": 0,
             "ataques_detectados": 0,
             "ataques_no_detectados": 0,
+            "ataques_alertados_modelo": 0,
+            "ataques_no_alertados_modelo": 0,
+            "homicidios_alertados_modelo": 0,
             "falsas_alarmas": 0,
+            "falsas_alarmas_modelo": 0,
+            "alertas_emitidas": 0,
+            "alertas_efectivas": 0,
+            "compliance_fallos": 0,
+            "despachos_priorizados": 0,
+            "redistribuciones_cobertura": 0,
+            "solicitudes_intereje": 0,
+            "prioridad_despacho_sum": 0.0,
+            "cobertura_zonal_abs_sum": 0.0,
+            "coord_intereje_sum": 0.0,
             "obj_deteccion": 0.0,
             "obj_precision": 0.0,
             "obj_gravedad": 0.0,
@@ -645,7 +811,19 @@ class LimaTransporteEnv(AECEnv):
             homicidios_no_detec = int(self._ep_homicidios_no_detectados[ag])
             total_ataques = ataques_detectados + ataques_no_detectados
             total_homicidios = homicidios_detectados + homicidios_no_detec
+            ataques_alertados_modelo = int(self._ep_ataques_alertados_modelo[ag])
+            ataques_no_alertados_modelo = int(self._ep_ataques_no_alertados_modelo[ag])
+            homicidios_alertados_modelo = int(self._ep_homicidios_alertados_modelo[ag])
+            total_ataques_modelo = ataques_alertados_modelo + ataques_no_alertados_modelo
             falsas_alarmas = int(self._ep_falsas_alarmas[ag])
+            falsas_alarmas_modelo = int(self._ep_falsas_alarmas_modelo[ag])
+            alertas_emitidas = int(self._ep_alertas_emitidas[ag])
+            alertas_efectivas = int(self._ep_alertas_efectivas[ag])
+            compliance_fallos = int(self._ep_compliance_fallos[ag])
+            n_decisiones = max(int(self._indice.get(ag, 0)), 1)
+            prioridad_sum = float(self._ep_prioridad_despacho_sum[ag])
+            cobertura_sum = float(self._ep_cobertura_zonal_abs_sum[ag])
+            coord_sum = float(self._ep_coord_intereje_sum[ag])
 
             eje_stats = {
                 "reward": float(self._ep_recompensas[ag]),
@@ -653,16 +831,44 @@ class LimaTransporteEnv(AECEnv):
                 "homicidios_no_detec": homicidios_no_detec,
                 "ataques_detectados": ataques_detectados,
                 "ataques_no_detectados": ataques_no_detectados,
+                "ataques_alertados_modelo": ataques_alertados_modelo,
+                "ataques_no_alertados_modelo": ataques_no_alertados_modelo,
+                "homicidios_alertados_modelo": homicidios_alertados_modelo,
                 "falsas_alarmas": falsas_alarmas,
+                "falsas_alarmas_modelo": falsas_alarmas_modelo,
+                "alertas_emitidas": alertas_emitidas,
+                "alertas_efectivas": alertas_efectivas,
+                "compliance_fallos": compliance_fallos,
+                "despachos_priorizados": int(self._ep_despachos_priorizados[ag]),
+                "redistribuciones_cobertura": int(self._ep_redistribuciones_cobertura[ag]),
+                "solicitudes_intereje": int(self._ep_solicitudes_intereje[ag]),
+                "prioridad_despacho_media": prioridad_sum / n_decisiones,
+                "cobertura_zonal_media_abs": cobertura_sum / n_decisiones,
+                "coordinacion_intereje_media": coord_sum / n_decisiones,
+                "prioridad_despacho_sum": prioridad_sum,
+                "cobertura_zonal_abs_sum": cobertura_sum,
+                "coord_intereje_sum": coord_sum,
                 "total_ataques": total_ataques,
                 "total_homicidios": total_homicidios,
                 "tasa_deteccion": (
                     ataques_detectados / total_ataques if total_ataques else 0.0
                 ),
+                "tasa_deteccion_modelo": (
+                    ataques_alertados_modelo / total_ataques_modelo
+                    if total_ataques_modelo else 0.0
+                ),
                 "tasa_homicidios_prevenidos": (
                     homicidios_detectados / total_homicidios if total_homicidios else 0.0
                 ),
+                "tasa_homicidios_alertados_modelo": (
+                    homicidios_alertados_modelo / total_homicidios
+                    if total_homicidios else 0.0
+                ),
                 "fp_por_ataque": falsas_alarmas / max(total_ataques, 1),
+                "fp_modelo_por_ataque": falsas_alarmas_modelo / max(total_ataques_modelo, 1),
+                "tasa_alerta_efectiva": (
+                    alertas_efectivas / alertas_emitidas if alertas_emitidas else 0.0
+                ),
                 "obj_deteccion": float(self._ep_obj[ag][0]),
                 "obj_precision": float(self._ep_obj[ag][1]),
                 "obj_gravedad": float(self._ep_obj[ag][2]),
@@ -675,7 +881,20 @@ class LimaTransporteEnv(AECEnv):
                 "homicidios_no_detec",
                 "ataques_detectados",
                 "ataques_no_detectados",
+                "ataques_alertados_modelo",
+                "ataques_no_alertados_modelo",
+                "homicidios_alertados_modelo",
                 "falsas_alarmas",
+                "falsas_alarmas_modelo",
+                "alertas_emitidas",
+                "alertas_efectivas",
+                "compliance_fallos",
+                "despachos_priorizados",
+                "redistribuciones_cobertura",
+                "solicitudes_intereje",
+                "prioridad_despacho_sum",
+                "cobertura_zonal_abs_sum",
+                "coord_intereje_sum",
                 "obj_deteccion",
                 "obj_precision",
                 "obj_gravedad",
@@ -688,11 +907,21 @@ class LimaTransporteEnv(AECEnv):
         total_homicidios_sistema = (
             sistema["homicidios_detectados"] + sistema["homicidios_no_detec"]
         )
+        total_ataques_modelo_sistema = (
+            sistema["ataques_alertados_modelo"]
+            + sistema["ataques_no_alertados_modelo"]
+        )
         sistema["total_ataques"] = int(total_ataques_sistema)
         sistema["total_homicidios"] = int(total_homicidios_sistema)
+        sistema["total_ataques_modelo"] = int(total_ataques_modelo_sistema)
         sistema["tasa_deteccion"] = (
             sistema["ataques_detectados"] / total_ataques_sistema
             if total_ataques_sistema
+            else 0.0
+        )
+        sistema["tasa_deteccion_modelo"] = (
+            sistema["ataques_alertados_modelo"] / total_ataques_modelo_sistema
+            if total_ataques_modelo_sistema
             else 0.0
         )
         sistema["tasa_homicidios_prevenidos"] = (
@@ -700,8 +929,31 @@ class LimaTransporteEnv(AECEnv):
             if total_homicidios_sistema
             else 0.0
         )
+        sistema["tasa_homicidios_alertados_modelo"] = (
+            sistema["homicidios_alertados_modelo"] / total_homicidios_sistema
+            if total_homicidios_sistema
+            else 0.0
+        )
         sistema["fp_por_ataque"] = sistema["falsas_alarmas"] / max(
             total_ataques_sistema, 1
+        )
+        sistema["fp_modelo_por_ataque"] = sistema["falsas_alarmas_modelo"] / max(
+            total_ataques_modelo_sistema, 1
+        )
+        sistema["tasa_alerta_efectiva"] = (
+            sistema["alertas_efectivas"] / sistema["alertas_emitidas"]
+            if sistema["alertas_emitidas"]
+            else 0.0
+        )
+        n_decisiones_sistema = max(sum(int(self._indice.get(ag, 0)) for ag in AGENTES), 1)
+        sistema["prioridad_despacho_media"] = (
+            sistema["prioridad_despacho_sum"] / n_decisiones_sistema
+        )
+        sistema["cobertura_zonal_media_abs"] = (
+            sistema["cobertura_zonal_abs_sum"] / n_decisiones_sistema
+        )
+        sistema["coordinacion_intereje_media"] = (
+            sistema["coord_intereje_sum"] / n_decisiones_sistema
         )
 
         return {
@@ -710,7 +962,17 @@ class LimaTransporteEnv(AECEnv):
             "homicidios_no_detec":   dict(self._ep_homicidios_no_detectados),
             "ataques_detectados":    dict(self._ep_ataques_detectados),
             "ataques_no_detectados": dict(self._ep_ataques_no_detectados),
+            "ataques_alertados_modelo": dict(self._ep_ataques_alertados_modelo),
+            "ataques_no_alertados_modelo": dict(self._ep_ataques_no_alertados_modelo),
+            "homicidios_alertados_modelo": dict(self._ep_homicidios_alertados_modelo),
             "falsas_alarmas":        dict(self._ep_falsas_alarmas),
+            "falsas_alarmas_modelo": dict(self._ep_falsas_alarmas_modelo),
+            "alertas_emitidas":      dict(self._ep_alertas_emitidas),
+            "alertas_efectivas":     dict(self._ep_alertas_efectivas),
+            "compliance_fallos":     dict(self._ep_compliance_fallos),
+            "despachos_priorizados": dict(self._ep_despachos_priorizados),
+            "redistribuciones_cobertura": dict(self._ep_redistribuciones_cobertura),
+            "solicitudes_intereje": dict(self._ep_solicitudes_intereje),
             "pasos":                 self._paso_actual,
             # Métricas de Equidad Geográfica
             "ataques_por_zona":      dict(self._ep_ataques_por_zona),

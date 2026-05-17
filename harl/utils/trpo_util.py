@@ -8,9 +8,10 @@ def flat_grad(grads):
     for grad in grads:
         if grad is None:
             continue
-        grad_flatten.append(grad.view(-1))
-    grad_flatten = torch.cat(grad_flatten)
-    return grad_flatten
+        grad_flatten.append(torch.nan_to_num(grad, nan=0.0, posinf=0.0, neginf=0.0).view(-1))
+    if not grad_flatten:
+        return torch.empty(0)
+    return torch.cat(grad_flatten)
 
 
 def flat_hessian(hessians):
@@ -19,9 +20,11 @@ def flat_hessian(hessians):
     for hessian in hessians:
         if hessian is None:
             continue
-        hessians_flatten.append(hessian.contiguous().view(-1))
-    hessians_flatten = torch.cat(hessians_flatten).data
-    return hessians_flatten
+        clean_hessian = torch.nan_to_num(hessian, nan=0.0, posinf=0.0, neginf=0.0)
+        hessians_flatten.append(clean_hessian.contiguous().view(-1))
+    if not hessians_flatten:
+        return torch.empty(0)
+    return torch.cat(hessians_flatten).data
 
 
 def flat_params(model):
@@ -35,6 +38,8 @@ def flat_params(model):
 
 def update_model(model, new_params):
     """Update the model parameters."""
+    if not torch.isfinite(new_params).all():
+        raise ValueError("TRPO recibio parametros no finitos.")
     index = 0
     for params in model.parameters():
         params_length = len(params.view(-1))
@@ -55,11 +60,14 @@ def _kl_normal_normal(p, q):
     """KL divergence between two normal distributions.
     adapted from https://pytorch.org/docs/stable/_modules/torch/distributions/kl.html#kl_divergence
     """
-    var_ratio = (p.scale.to(torch.float64) / q.scale.to(torch.float64)).pow(2)
+    p_scale = torch.clamp(p.scale.to(torch.float64), min=1e-6, max=10.0)
+    q_scale = torch.clamp(q.scale.to(torch.float64), min=1e-6, max=10.0)
+    var_ratio = (p_scale / q_scale).pow(2)
     t1 = (
-        (p.loc.to(torch.float64) - q.loc.to(torch.float64)) / q.scale.to(torch.float64)
+        (p.loc.to(torch.float64) - q.loc.to(torch.float64)) / q_scale
     ).pow(2)
-    return 0.5 * (var_ratio + t1 - 1 - var_ratio.log())
+    kl = 0.5 * (var_ratio + t1 - 1 - var_ratio.log())
+    return torch.nan_to_num(kl.to(torch.float32), nan=0.0, posinf=1e6, neginf=0.0)
 
 
 def kl_divergence(
@@ -89,7 +97,7 @@ def kl_divergence(
 
     if len(kl.shape) > 1:
         kl = kl.sum(1, keepdim=True)
-    return kl
+    return torch.nan_to_num(kl, nan=0.0, posinf=1e6, neginf=0.0)
 
 
 # pylint: disable-next=invalid-name
@@ -109,24 +117,36 @@ def conjugate_gradient(
     """Conjugate gradient algorithm.
     # refer to https://github.com/openai/baselines/blob/master/baselines/common/cg.py
     """
+    b = torch.nan_to_num(b, nan=0.0, posinf=0.0, neginf=0.0)
     x = torch.zeros(b.size()).to(device=device)
     r = b.clone()
     p = b.clone()
     rdotr = torch.dot(r, r)
+    if (not torch.isfinite(rdotr)) or rdotr <= residual_tol:
+        return x
     for _ in range(nsteps):
         _Avp = fisher_vector_product(
             actor, obs, rnn_states, action, masks, available_actions, active_masks, p
         )
-        alpha = rdotr / torch.dot(p, _Avp)
+        denom = torch.dot(p, _Avp)
+        if (not torch.isfinite(denom)) or torch.abs(denom) <= 1e-12:
+            break
+        alpha = rdotr / denom
+        if not torch.isfinite(alpha):
+            break
         x += alpha * p
         r -= alpha * _Avp
         new_rdotr = torch.dot(r, r)
+        if not torch.isfinite(new_rdotr):
+            break
         betta = new_rdotr / rdotr
+        if not torch.isfinite(betta):
+            break
         p = r + betta * p
         rdotr = new_rdotr
         if rdotr < residual_tol:
             break
-    return x
+    return torch.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
 
 
 def fisher_vector_product(
@@ -134,7 +154,7 @@ def fisher_vector_product(
 ):
     """Fisher vector product."""
     with torch.backends.cudnn.flags(enabled=False):
-        p.detach()
+        p = torch.nan_to_num(p.detach(), nan=0.0, posinf=0.0, neginf=0.0)
         kl = kl_divergence(
             obs,
             rnn_states,
@@ -155,4 +175,6 @@ def fisher_vector_product(
             kl_grad_p, actor.parameters(), allow_unused=True
         )
         kl_hessian_p = flat_hessian(kl_hessian_p)
-        return kl_hessian_p + 0.1 * p
+        if kl_hessian_p.numel() != p.numel():
+            return 0.1 * p
+        return torch.nan_to_num(kl_hessian_p + 0.1 * p, nan=0.0, posinf=0.0, neginf=0.0)

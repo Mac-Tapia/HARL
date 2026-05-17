@@ -3,6 +3,7 @@ from copy import deepcopy
 import torch
 from harl.models.policy_models.deterministic_policy import DeterministicPolicy
 from harl.utils.envs_tools import check
+from harl.utils.models_tools import make_optimizer
 from harl.algorithms.actors.off_policy_base import OffPolicyBase
 
 
@@ -20,7 +21,7 @@ class HADDPG(OffPolicyBase):
         self.target_actor = deepcopy(self.actor)
         for p in self.target_actor.parameters():
             p.requires_grad = False
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.lr)
+        self.actor_optimizer = make_optimizer(self.actor.parameters(), lr=self.lr, args=args)
         self.low = torch.tensor(act_space.low).to(**self.tpdv)
         self.high = torch.tensor(act_space.high).to(**self.tpdv)
         self.scale = (self.high - self.low) / 2

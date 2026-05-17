@@ -4,6 +4,7 @@ from harl.models.policy_models.squashed_gaussian_policy import SquashedGaussianP
 from harl.models.policy_models.stochastic_mlp_policy import StochasticMlpPolicy
 from harl.utils.discrete_util import gumbel_softmax
 from harl.utils.envs_tools import check
+from harl.utils.models_tools import make_optimizer
 from harl.algorithms.actors.off_policy_base import OffPolicyBase
 
 
@@ -20,7 +21,7 @@ class HASAC(OffPolicyBase):
         else:
             self.actor = StochasticMlpPolicy(args, obs_space, act_space, device)
 
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.lr)
+        self.actor_optimizer = make_optimizer(self.actor.parameters(), lr=self.lr, args=args)
         self.turn_off_grad()
 
     def get_actions(self, obs, available_actions=None, stochastic=True):

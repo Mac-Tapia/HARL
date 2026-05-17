@@ -2,7 +2,7 @@
 
 import torch
 from harl.models.policy_models.stochastic_policy import StochasticPolicy
-from harl.utils.models_tools import update_linear_schedule
+from harl.utils.models_tools import make_optimizer, update_linear_schedule
 
 
 class OnPolicyBase:
@@ -34,9 +34,10 @@ class OnPolicyBase:
         # create actor network
         self.actor = StochasticPolicy(args, self.obs_space, self.act_space, self.device)
         # create actor optimizer
-        self.actor_optimizer = torch.optim.Adam(
+        self.actor_optimizer = make_optimizer(
             self.actor.parameters(),
             lr=self.lr,
+            args=args,
             eps=self.opti_eps,
             weight_decay=self.weight_decay,
         )
