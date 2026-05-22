@@ -16,7 +16,7 @@ from gymnasium import spaces
 
 from harl.envs.lima_transporte.lima_env import LimaTransporteEnv, AGENTES, OBS_DIM
 
-GLOBAL_DIM = OBS_DIM * len(AGENTES)   # 57 = 19x3: estado global base para el critico centralizado
+GLOBAL_DIM = OBS_DIM * len(AGENTES)   # 57 = 19x3: estado global base sin demanda predictiva
 COMMUNICATION_DIM = 6
 REWARD_MODES = {"individual", "team_mean", "team_sum"}
 COMMUNICATION_MODES = {"none", "ctde_state", "ctde_message"}
@@ -56,12 +56,15 @@ class LimaHARLWrapper:
             data_dir=env_args.get("data_dir", "data/processed"),
             dataset_split=env_args.get("dataset_split", env_args.get("split", "train")),
             causal_obs=env_args.get("causal_obs", env_args.get("production_obs", False)),
+            use_demand_forecast=env_args.get("use_demand_forecast", False),
             seed=env_args.get("seed", 42),
         )
         self.n_agents = len(AGENTES)
         self.agents   = AGENTES.copy()
         self._seed    = env_args.get("seed", 42)
-        self.share_dim = GLOBAL_DIM + (
+        self.obs_dim = int(getattr(self._env, "obs_dim", OBS_DIM))
+        self.global_dim = self.obs_dim * self.n_agents
+        self.share_dim = self.global_dim + (
             COMMUNICATION_DIM if self.communication_mode == "ctde_message" else 0
         )
 
@@ -72,7 +75,7 @@ class LimaHARLWrapper:
         self.action_space = [
             self._env.action_spaces[ag] for ag in AGENTES
         ]
-        # Estado compartido para CTDE. El actor conserva obs local de 19 variables;
+        # Estado compartido para CTDE. El actor conserva obs local;
         # el mensaje agregado solo alimenta al critico centralizado.
         _glob = spaces.Box(low=-np.inf, high=np.inf,
                            shape=(self.share_dim,), dtype=np.float32)

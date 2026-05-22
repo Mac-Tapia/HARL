@@ -13,7 +13,7 @@ apoyo, despacho, cobertura y coordinación entre ejes.
 El crítico centralizado observa el estado global de los 3 agentes.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ESPACIO DE OBSERVACIÓN — OBS_DIM = 19
+ESPACIO DE OBSERVACIÓN — OBS_DIM = 19 base / 20 con demanda predictiva
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   Contexto espacio-temporal (base):
   [0]  zona_id_n       — distrito normalizado ∈ [0,1]
@@ -46,6 +46,8 @@ ESPACIO DE OBSERVACIÓN — OBS_DIM = 19
   [16] victima_sexo_n  — sexo víctima: 0=no_id/masculino, 1=femenino
   [17] victima_edad_n  — edad normalizada ∈ [0,1]  (máx=90 años; -1→0)
   [18] victima_menor   — víctima menor de edad ∈ {0,1}
+  [19] demanda_pred_n  — demanda pronosticada normalizada ∈ [0,1]
+                         Solo se incluye si use_demand_forecast=True.
 
   Justificación codificación cíclica: hora=23 y hora=0 son adyacentes;
   la normalización lineal crea distancia artificial de 23 unidades.
@@ -98,7 +100,10 @@ from gymnasium import spaces
 
 AGENTES   = ["buses", "combis", "mototaxis"]
 N_ZONAS   = 24
-OBS_DIM   = 19   # Ver docstring: contexto(9) + gravedad(3) + extorsion(3) + modus(1) + victima(3)
+OBS_DIM_BASE = 19
+DEMAND_FORECAST_OBS_IDX = 19
+OBS_DIM   = OBS_DIM_BASE   # Compatibilidad: dimension base sin demanda predictiva.
+OBS_DIM_WITH_DEMAND = OBS_DIM_BASE + 1
 ACTION_DIM = 6
 ACT_DIM   = {ag: ACTION_DIM for ag in AGENTES}
 ACTION_LOW = -1.0
@@ -184,6 +189,7 @@ class LimaTransporteEnv(AECEnv):
         data_dir: str = "data/processed",
         dataset_split: str = "train",
         causal_obs: bool = False,
+        use_demand_forecast: bool = False,
         seed: int = 42,
         render_mode: Optional[str] = None,
     ):
@@ -194,6 +200,8 @@ class LimaTransporteEnv(AECEnv):
         if self.dataset_split not in {"train", "val"}:
             raise ValueError("dataset_split debe ser 'train' o 'val'")
         self.causal_obs   = bool(causal_obs)
+        self.use_demand_forecast = bool(use_demand_forecast)
+        self.obs_dim = OBS_DIM_WITH_DEMAND if self.use_demand_forecast else OBS_DIM_BASE
         self.seed_val     = seed
         self.render_mode  = render_mode
         self._rng         = np.random.default_rng(seed)
@@ -202,12 +210,13 @@ class LimaTransporteEnv(AECEnv):
         self.possible_agents = AGENTES.copy()
         self.agents          = AGENTES.copy()
 
-        # Espacios de observación — Vector de 19 Dimensiones (OBS_DIM)
+        # Espacios de observación — Vector base de 19 dimensiones.
         # [zona, h_sin, h_cos, d_sin, d_cos, hist, alerta, riesgo, visual,
         #  homicidio, herido, arma,
         #  extorsion, monto, tipo_ext,
         #  vehiculo,
-        #  sexo, edad, menor]
+        #  sexo, edad, menor,
+        #  demanda_pred_n opcional]
         obs_low  = np.array(
             [0, -1, -1, -1, -1, 0, 0, 0, 0,
              0,  0,  0,
@@ -220,6 +229,9 @@ class LimaTransporteEnv(AECEnv):
              1,  1,  1,
              1,
              1,  1,  1], dtype=np.float32)
+        if self.use_demand_forecast:
+            obs_low = np.append(obs_low, np.float32(0.0)).astype(np.float32)
+            obs_high = np.append(obs_high, np.float32(1.0)).astype(np.float32)
         self.observation_spaces = {
             ag: spaces.Box(low=obs_low, high=obs_high, dtype=np.float32)
             for ag in self.possible_agents
@@ -385,7 +397,7 @@ class LimaTransporteEnv(AECEnv):
         return self._obs_buffer.get(agent, self._get_obs(agent))
 
     def _get_obs(self, agente: str) -> np.ndarray:
-        """Construye el vector de observación local del agente (OBS_DIM=19)."""
+        """Construye el vector de observación local del agente."""
         df   = self._datos[agente]
         idx  = self._indice[agente] % len(df)
         fila = df.iloc[idx]
@@ -405,10 +417,18 @@ class LimaTransporteEnv(AECEnv):
         alerta_p = float(self._alerta_previa[agente])
         riesgo   = float(fila.get("riesgo_zona", 0.5))
 
-        # flag_visual: señal simulada de cámara (TP≈0.88, FP≈0.05)
+        # flag_visual: si el dataset trae evidencia YOLO validada se usa como
+        # señal causal; si no existe, se mantiene la simulacion reproducible.
         ataque = int(fila.get("ataque_ocurrido", 0))
-        p_vis = 0.88 if ataque == 1 else 0.05
-        flag_visual = float(self._rng.random() < p_vis)
+        if "flag_visual" in fila.index:
+            try:
+                flag_visual = float(fila.get("flag_visual", 0.0))
+            except (TypeError, ValueError):
+                flag_visual = 0.0
+            flag_visual = max(0.0, min(flag_visual, 1.0))
+        else:
+            p_vis = 0.88 if ataque == 1 else 0.05
+            flag_visual = float(self._rng.random() < p_vis)
 
         # ── Gravedad del evento (campos 9-11) ───────────────────────────────
         homicidio = float(fila.get("homicidio",  0))
@@ -437,6 +457,10 @@ class LimaTransporteEnv(AECEnv):
              sexo_n, edad_n, menor],
             dtype=np.float32,
         )
+        if self.use_demand_forecast:
+            demanda_pred_n = float(fila.get("demanda_pred_n", 0.0))
+            demanda_pred_n = max(0.0, min(demanda_pred_n, 1.0))
+            obs = np.append(obs, np.float32(demanda_pred_n)).astype(np.float32)
         if self.causal_obs:
             obs[list(NON_CAUSAL_OBS_IDX)] = 0.0
         return obs
@@ -771,9 +795,9 @@ class LimaTransporteEnv(AECEnv):
     # ── Estado global (para el crítico centralizado HAPPO) ────────────────
 
     def get_global_state(self) -> np.ndarray:
-        """Concatena observaciones locales de los 3 agentes → estado global (dim 57 = 19×3)."""
+        """Concatena observaciones locales de los 3 agentes para el critico CTDE."""
         return np.concatenate([
-            self._obs_buffer.get(ag, np.zeros(OBS_DIM, dtype=np.float32))
+            self._obs_buffer.get(ag, np.zeros(self.obs_dim, dtype=np.float32))
             for ag in AGENTES
         ], dtype=np.float32)
 

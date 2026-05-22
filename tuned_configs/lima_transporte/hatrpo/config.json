@@ -83,6 +83,10 @@
     "env_args": {
         "max_steps": 672,
         "data_dir": "data/processed",
-        "seed": 42
+        "seed": 42,
+        "causal_obs": true,
+        "use_demand_forecast": true,
+        "reward_mode": "team_mean",
+        "communication_mode": "ctde_message"
     }
 }
