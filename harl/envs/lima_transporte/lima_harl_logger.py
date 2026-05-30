@@ -101,7 +101,8 @@ class LimaTransporteLogger(BaseLogger):
         t    = self.algo_args["train"]
         m    = self.algo_args.get("model", {})
         a    = self.algo_args.get("algo", {})
-        algo = self.args["algo"].upper()
+        algo_key = str(self.args["algo"]).lower()
+        algo = algo_key.upper()
         ep_len  = t.get("episode_length", "?")
         lr      = m.get("lr", "?")
         c_lr    = m.get("critic_lr", "?")
@@ -118,8 +119,27 @@ class LimaTransporteLogger(BaseLogger):
         print(f"  {algo} — Hiperparámetros de entrenamiento")
         print(f"{'='*60}")
         print(f"  lr_actor={lr}  lr_critic={c_lr}")
-        print(f"  gamma={gamma}  lambda(GAE)={lam}  entropy_coef={entropy}")
-        print(f"  clip={clip}  ppo_epochs={epochs}  critic_epochs={c_epochs}  mini_batches={mbatch}")
+        if algo_key == "hatrpo":
+            kl = a.get("kl_threshold", "?")
+            ls_step = a.get("ls_step", "?")
+            accept_ratio = a.get("accept_ratio", "?")
+            backtrack = a.get("backtrack_coeff", "?")
+            c_mbatch = a.get("critic_num_mini_batch", "?")
+            action_aggregation = a.get("action_aggregation", "?")
+            std_y = m.get("std_y_coef", "?")
+            print(f"  gamma={gamma}  lambda(GAE)={lam}  kl_threshold={kl}")
+            print(
+                f"  clip={clip}  critic_epochs={c_epochs}  "
+                f"critic_mini_batches={c_mbatch}"
+            )
+            print(
+                f"  line_search: ls_step={ls_step}  accept_ratio={accept_ratio}  "
+                f"backtrack_coeff={backtrack}"
+            )
+            print(f"  action_aggregation={action_aggregation}  std_y_coef={std_y}")
+        else:
+            print(f"  gamma={gamma}  lambda(GAE)={lam}  entropy_coef={entropy}")
+            print(f"  clip={clip}  ppo_epochs={epochs}  critic_epochs={c_epochs}  mini_batches={mbatch}")
         print(f"  value_loss_coef={vcoef}  hidden_sizes={hidden}  episode_length={ep_len}")
         print(f"  Agentes: {AGENTES[:self.num_agents]}")
         print(f"{'='*60}\n")
@@ -379,6 +399,7 @@ class LimaTransporteLogger(BaseLogger):
 
         trace_path = self._trace_path
         tables_dir = self._tables_dir
+        tables_dir.mkdir(parents=True, exist_ok=True)
 
         if not trace_path.exists() or trace_path.stat().st_size < 50:
             print(f"[Logger] trace.csv vacío — omitiendo exportación.")
