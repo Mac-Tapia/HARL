@@ -548,14 +548,45 @@ class LimaTransporteLogger(BaseLogger):
         df_hist.to_csv(str(hist_csv_path), index=False, encoding="utf-8-sig")
         print(f"  -> historial_entrenamiento.csv ({n_ep} episodios, {len(df_hist.columns)} cols)")
 
-        # ── 4. Copiar timeseries.csv al tables_dir ────────────────────────────
         import shutil
+        resume_offset = int(self.algo_args.get("train", {}).get("_resume_offset_ep", 0))
+
+        # ── 4. Copiar/merge timeseries.csv al tables_dir ──────────────────────
         ts_dest = tables_dir / f"timeseries_{algo_key}.csv"
         try:
-            shutil.copy2(str(ts_path), str(ts_dest))
-            print(f"  -> timeseries_{algo_key}.csv")
-        except Exception:
-            pass
+            if resume_offset > 0 and ts_dest.exists() and ts_dest.stat().st_size > 50:
+                df_prev = pd.read_csv(str(ts_dest))
+                df_new  = pd.read_csv(str(ts_path))
+                df_new["episodio"] = df_new["episodio"] + resume_offset
+                df_new["total_steps"] = df_new["total_steps"] + (resume_offset * int(
+                    self.algo_args["train"].get("episode_length", 672)
+                ))
+                pd.concat([df_prev, df_new], ignore_index=True).to_csv(
+                    str(ts_dest), index=False, encoding="utf-8-sig"
+                )
+                print(f"  -> timeseries_{algo_key}.csv (merged +{len(df_new)} filas, offset={resume_offset})")
+            else:
+                shutil.copy2(str(ts_path), str(ts_dest))
+                print(f"  -> timeseries_{algo_key}.csv")
+        except Exception as _e:
+            print(f"  [WARN] timeseries merge: {_e}")
+
+        # ── 5. Copiar/merge trace.csv al tables_dir ───────────────────────────
+        tr_dest = tables_dir / f"trace_{algo_key}.csv"
+        try:
+            if resume_offset > 0 and tr_dest.exists() and tr_dest.stat().st_size > 50:
+                df_prev = pd.read_csv(str(tr_dest))
+                df_new  = pd.read_csv(str(trace_path))
+                df_new["episodio"] = df_new["episodio"] + resume_offset
+                pd.concat([df_prev, df_new], ignore_index=True).to_csv(
+                    str(tr_dest), index=False, encoding="utf-8-sig"
+                )
+                print(f"  -> trace_{algo_key}.csv (merged +{len(df_new)} eps, offset={resume_offset})")
+            else:
+                shutil.copy2(str(trace_path), str(tr_dest))
+                print(f"  -> trace_{algo_key}.csv")
+        except Exception as _e:
+            print(f"  [WARN] trace merge: {_e}")
 
         print(f"[Logger] Archivos en: {tables_dir}\n")
 
