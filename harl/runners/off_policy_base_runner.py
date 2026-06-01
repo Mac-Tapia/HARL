@@ -1,6 +1,8 @@
 """Base runner for off-policy algorithms."""
 import os
+import shutil
 import time
+from pathlib import Path
 import torch
 import numpy as np
 import setproctitle
@@ -318,6 +320,9 @@ class OffPolicyBaseRunner:
                         )
                         self.log_file.flush()
                         self.done_episodes_rewards = []
+                episode_length = max(1, int(self.env_args.get("max_steps", 672)))
+                env_steps = step * int(self.algo_args["train"]["n_rollout_threads"])
+                self._last_save_episode = max(1, env_steps // episode_length)
                 self.save()
 
     def warmup(self):
@@ -749,6 +754,17 @@ class OffPolicyBaseRunner:
                 self.value_normalizer.state_dict(),
                 str(self.save_dir) + "/value_normalizer" + ".pt",
             )
+        self._snapshot_checkpoint()
+
+    def _snapshot_checkpoint(self):
+        """Keep persistent checkpoint snapshots without breaking HARL restore."""
+        episode = getattr(self, "_last_save_episode", None)
+        if episode is None:
+            return
+        checkpoint_dir = Path(self.run_dir) / "checkpoints" / f"ep_{int(episode):04d}"
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        for model_file in Path(self.save_dir).glob("*.pt"):
+            shutil.copy2(str(model_file), str(checkpoint_dir / model_file.name))
 
     def close(self):
         """Close environment, writter, and log file."""
