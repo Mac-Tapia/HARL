@@ -1,6 +1,6 @@
 import numpy as np
 from gym import spaces
-from typing import List, Tuple
+from typing import Tuple
 from abc import ABC, abstractmethod
 from ..core.catalog import Catalog as c
 

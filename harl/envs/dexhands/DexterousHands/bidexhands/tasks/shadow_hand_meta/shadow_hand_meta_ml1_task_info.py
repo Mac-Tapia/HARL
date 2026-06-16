@@ -1,15 +1,7 @@
-from matplotlib.pyplot import axis
-import numpy as np
-import os
-import random
 import torch
 
 from harl.envs.dexhands.DexterousHands.bidexhands.utils.torch_jit_utils import *
-from harl.envs.dexhands.DexterousHands.bidexhands.tasks.hand_base.base_task import (
-    BaseTask,
-)
 
-from isaacgym import gymtorch
 from isaacgym import gymapi
 
 

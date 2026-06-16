@@ -5,7 +5,6 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-from matplotlib.pyplot import axis
 from PIL import Image as Im
 import numpy as np
 import os
@@ -149,7 +148,7 @@ class ShadowHandCatchAbreast(BaseTask):
         # can be "openai", "full_no_vel", "full", "full_state"
         self.obs_type = self.cfg["env"]["observationType"]
 
-        if not (self.obs_type in ["point_cloud", "full_state"]):
+        if self.obs_type not in ["point_cloud", "full_state"]:
             raise Exception(
                 "Unknown type of observations!\nobservationType should be one of: [point_cloud, full_state]"
             )
@@ -206,10 +205,7 @@ class ShadowHandCatchAbreast(BaseTask):
         self.cfg["headless"] = headless
 
         if self.obs_type in ["point_cloud"]:
-            from PIL import Image as Im
-            from harl.envs.dexhands.DexterousHands.bidexhands.utils import (
-                o3dviewer,
-            )
+            pass
 
             # from pointnet2_ops import pointnet2_utils
 

@@ -2,7 +2,6 @@
 Modified from OpenAI Baselines code to work with multi-agent envs
 """
 import numpy as np
-import torch
 from multiprocessing import Process, Pipe
 from abc import ABC, abstractmethod
 import copy

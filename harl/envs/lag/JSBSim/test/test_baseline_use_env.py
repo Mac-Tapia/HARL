@@ -5,12 +5,11 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))))
 import torch
 import numpy as np
-import matplotlib.pyplot as plt
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing_extensions import Literal
 from envs.JSBSim.core.catalog import Catalog as c
 from envs.JSBSim.utils.utils import in_range_rad, get_root_dir
-from envs.JSBSim.envs import SingleCombatEnv, SingleControlEnv
+from envs.JSBSim.envs import SingleCombatEnv
 from envs.JSBSim.model.baseline_actor import BaselineActor
 
 

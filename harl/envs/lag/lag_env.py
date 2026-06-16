@@ -5,7 +5,6 @@ from harl.envs.lag.JSBSim.envs import (
     SingleControlEnv,
     MultipleCombatEnv,
 )
-import torch
 
 
 class LAGEnv:

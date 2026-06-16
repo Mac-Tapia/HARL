@@ -1,9 +1,6 @@
 """Base class for off-policy algorithms."""
 
-from copy import deepcopy
-import numpy as np
 import torch
-from harl.utils.envs_tools import check
 from harl.utils.models_tools import update_linear_schedule
 
 

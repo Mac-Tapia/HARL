@@ -1,9 +1,7 @@
 import numpy as np
 from gym import spaces
-from typing import Tuple
-import torch
 
-from .multiplecombat_task import MultipleCombatTask, HierarchicalMultipleCombatTask, HierarchicalMultipleCombatShootTask
+from .multiplecombat_task import MultipleCombatTask, HierarchicalMultipleCombatTask
 from ..reward_functions import AltitudeReward, PostureReward, EventDrivenReward, MissilePostureReward
 from ..utils.utils import get_AO_TA_R, LLA2NEU
 from ..core.simulatior import MissileSimulator

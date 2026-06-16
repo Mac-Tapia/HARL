@@ -26,7 +26,6 @@ import os.path as osp
 from pathlib import Path
 import yaml
 
-import random
 from gym.spaces import Discrete
 
 races = {

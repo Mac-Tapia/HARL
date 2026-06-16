@@ -6,7 +6,6 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 # from threading import enumerate
-from matplotlib.pyplot import axis
 import numpy as np
 import os
 import random
@@ -108,7 +107,7 @@ class ShadowHandMetaML1(BaseTask):
         # can be "openai", "full_no_vel", "full", "full_state"
         self.obs_type = self.cfg["env"]["observationType"]
 
-        if not (self.obs_type in ["openai", "full_no_vel", "full", "full_state"]):
+        if self.obs_type not in ["openai", "full_no_vel", "full", "full_state"]:
             raise Exception(
                 "Unknown type of observations!\nobservationType should be one of: [openai, full_no_vel, full, full_state]"
             )
@@ -290,7 +289,6 @@ class ShadowHandMetaML1(BaseTask):
         asset_root = "../../assets"
         shadow_hand_asset_file = "mjcf/open_ai_assets/hand/shadow_hand.xml"
         shadow_hand_another_asset_file = "mjcf/open_ai_assets/hand/shadow_hand1.xml"
-        import os
 
         table_texture_files = os.path.join(
             os.getcwd(),

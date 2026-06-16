@@ -6,8 +6,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 import torch
 import numpy as np
 from typing_extensions import Literal
-import matplotlib.pyplot as plt
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from envs.JSBSim.envs import SingleCombatEnv
 from envs.JSBSim.utils.utils import get_root_dir
 from envs.JSBSim.model.baseline_actor import BaselineActor

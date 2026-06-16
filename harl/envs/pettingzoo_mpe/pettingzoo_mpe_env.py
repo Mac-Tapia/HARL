@@ -1,7 +1,6 @@
 import copy
 import importlib
 import logging
-import numpy as np
 import supersuit as ss
 
 logging.basicConfig()

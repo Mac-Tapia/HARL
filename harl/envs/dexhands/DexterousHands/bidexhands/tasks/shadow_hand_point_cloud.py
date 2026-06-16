@@ -26,7 +26,6 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from matplotlib.pyplot import axis
 import matplotlib.pyplot as plt
 from PIL import Image as Im
 
@@ -36,7 +35,6 @@ import random
 import torch
 
 from harl.envs.dexhands.DexterousHands.bidexhands.utils.torch_jit_utils import *
-from harl.envs.dexhands.DexterousHands.bidexhands.utils import o3dviewer
 from harl.envs.dexhands.DexterousHands.bidexhands.tasks.hand_base.base_task import (
     BaseTask,
 )
@@ -133,7 +131,7 @@ class ShadowHandPointCloud(BaseTask):
         # can be "openai", "full_no_vel", "full", "full_state"
         self.obs_type = self.cfg["env"]["observationType"]
 
-        if not (self.obs_type in ["openai", "full_no_vel", "full", "full_state"]):
+        if self.obs_type not in ["openai", "full_no_vel", "full", "full_state"]:
             raise Exception(
                 "Unknown type of observations!\nobservationType should be one of: [openai, full_no_vel, full, full_state]"
             )

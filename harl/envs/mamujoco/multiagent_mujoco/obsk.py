@@ -734,7 +734,7 @@ def get_parts_and_edges(label, partitioning):
             n_agents = int(partitioning.split("x")[0])
             n_segs_per_agents = int(partitioning.split("x")[1])
             n_segs = n_agents * n_segs_per_agents
-        except Exception as e:
+        except Exception:
             raise Exception("UNKNOWN partitioning config: {}".format(partitioning))
 
         # Note: Default Swimmer corresponds to n_segs = 3
@@ -759,7 +759,7 @@ def get_parts_and_edges(label, partitioning):
             n_agents = int(partitioning.split("x")[0])
             n_segs_per_agents = int(partitioning.split("x")[1])
             n_segs = n_agents * n_segs_per_agents
-        except Exception as e:
+        except Exception:
             raise Exception("UNKNOWN partitioning config: {}".format(partitioning))
 
         # # define Mujoco graph

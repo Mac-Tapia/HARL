@@ -4,7 +4,7 @@ import numpy as np
 from collections import deque
 from abc import ABC, abstractmethod
 from typing_extensions import Literal
-from typing import Union, List
+from typing import Union
 
 import jsbsim
 from .catalog import Property, Catalog

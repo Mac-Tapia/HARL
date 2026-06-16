@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict
 from .env_base import BaseEnv
 from ..tasks.multiplecombat_task import HierarchicalMultipleCombatShootTask, HierarchicalMultipleCombatTask, MultipleCombatTask
 from ..tasks.multiplecombat_vs_baseline_task import HierarchicalMultipleCombatVsBaselineTask, MultipleCombatVsBaselineTask, HierarchicalMultipleCombatShootVsBaselineTask

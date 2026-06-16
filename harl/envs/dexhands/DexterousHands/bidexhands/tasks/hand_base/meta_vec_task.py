@@ -4,11 +4,8 @@
 # and any modifications thereto.  Any use, reproduction, disclosure or
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
-from collections import defaultdict
 from gym import spaces
 
-from isaacgym import gymtorch
-from isaacgym.torch_utils import to_torch
 import torch
 import numpy as np
 import random

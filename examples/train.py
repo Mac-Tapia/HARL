@@ -76,7 +76,7 @@ def main():
     update_args(unparsed_dict, algo_args, env_args)  # update args from command line
 
     if args["env"] == "dexhands":
-        import isaacgym  # isaacgym has to be imported before PyTorch
+        pass  # isaacgym has to be imported before PyTorch
 
     # note: isaac gym does not support multiple instances, thus cannot eval separately
     if args["env"] == "dexhands":

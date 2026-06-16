@@ -5,10 +5,7 @@
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
-from matplotlib.pyplot import axis
 import numpy as np
-import os
-import random
 import torch
 
 from harl.envs.dexhands.DexterousHands.bidexhands.utils.torch_jit_utils import *
@@ -108,7 +105,7 @@ class AllegroHandOver(BaseTask):
         # can be "openai", "full_no_vel", "full", "full_state"
         self.obs_type = self.cfg["env"]["observationType"]
 
-        if not (self.obs_type in ["openai", "full_no_vel", "full", "full_state"]):
+        if self.obs_type not in ["openai", "full_no_vel", "full", "full_state"]:
             raise Exception(
                 "Unknown type of observations!\nobservationType should be one of: [openai, full_no_vel, full, full_state]"
             )

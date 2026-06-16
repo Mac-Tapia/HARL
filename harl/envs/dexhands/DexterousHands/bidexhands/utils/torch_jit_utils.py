@@ -6,7 +6,6 @@
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
 
 import torch
-import numpy as np
 from isaacgym.torch_utils import *
 
 
