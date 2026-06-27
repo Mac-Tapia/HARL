@@ -70,17 +70,29 @@ def get_task_name(env, env_args):
 
 
 def init_dir(env, env_args, algo, exp_name, seed, logger_path):
-    """Init directory for saving results."""
-    task = get_task_name(env, env_args)
-    hms_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
-    results_path = os.path.join(
-        logger_path,
-        env,
-        task,
-        algo,
-        exp_name,
-        "-".join(["seed-{:0>5}".format(seed), hms_time]),
-    )
+    """Init directory for saving results.
+
+    MADRLCitytleranflexresdr: el árbol original de HARL anidaba 5 niveles
+    redundantes (``env/task/algo/exp_name/seed-NNNNN-<timestamp>``) bajo el
+    ``logger_path`` que ya es único por corrida (``outputs/<run>/HAPPO/E1/checkpoints``).
+    Aquí escribimos directamente en ``logger_path`` para un árbol plano:
+    ``.../checkpoints/{logs,models}``. Si ``CITYLEARN_FLAT_HARL_DIRS=0`` se
+    conserva el comportamiento original de HARL.
+    """
+    flat = os.environ.get("CITYLEARN_FLAT_HARL_DIRS", "1") != "0"
+    if flat:
+        results_path = logger_path
+    else:
+        task = get_task_name(env, env_args)
+        hms_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
+        results_path = os.path.join(
+            logger_path,
+            env,
+            task,
+            algo,
+            exp_name,
+            "-".join(["seed-{:0>5}".format(seed), hms_time]),
+        )
     log_path = os.path.join(results_path, "logs")
     os.makedirs(log_path, exist_ok=True)
     from tensorboardX import SummaryWriter
