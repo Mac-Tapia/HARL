@@ -7,6 +7,12 @@ from abc import ABC, abstractmethod
 import copy
 
 
+class VecEnvWrapper:
+    """Compatibility stub: HARL fork omits gym vector wrappers but legacy ``unwrapped`` may reference this name."""
+
+    pass
+
+
 def tile_images(img_nhwc):
     """
     Tile N images into one big PxQ image
@@ -149,10 +155,8 @@ class ShareVecEnv(ABC):
 
     @property
     def unwrapped(self):
-        if isinstance(self, VecEnvWrapper):
-            return self.venv.unwrapped
-        else:
-            return self
+        # HARL fork omits VecEnvWrapper; ShareSubprocVecEnv is the leaf vec env.
+        return self
 
     def get_viewer(self):
         if self.viewer is None:
