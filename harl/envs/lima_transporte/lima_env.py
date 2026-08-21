@@ -156,6 +156,96 @@ FACTOR_RIESGO = {
 HORAS_PICO   = {5, 6, 7, 17, 18, 19, 20, 21}
 
 
+def build_obs_from_row(
+    fila,
+    *,
+    alerta_previa: float = 0.0,
+    use_demand_forecast: bool = False,
+    causal_obs: bool = True,
+    rng: Optional[np.random.Generator] = None,
+) -> np.ndarray:
+    """Construye el vector de observación de 19 (o 20) dims a partir de una fila.
+
+    `fila` acepta tanto una `pandas.Series` (fila de dataset) como un `dict`
+    (payload de un evento simulado/en vivo): ambos exponen `.get(clave, default)`
+    y soportan `"clave" in fila`. Es la unica fuente de verdad del mapeo
+    payload -> observacion, usada tanto por `LimaTransporteEnv._get_obs` como
+    por el servicio de inferencia en vivo (`src/api/inference.py`).
+
+    Un payload de API (a diferencia de una fila de dataset) suele traer
+    claves opcionales presentes pero con valor `None` (p.ej. un modelo
+    Pydantic sin ese campo relleno): `_g` trata `None` igual que "ausente".
+    """
+
+    def _g(key: str, default):
+        value = fila.get(key, default)
+        return default if value is None else value
+
+    # ── Contexto espacio-temporal (campos 0-8) ──────────────────────────
+    zona_n = float(_g("zona_id", 0)) / float(N_ZONAS - 1)  # [0,23] → [0,1]
+
+    hora = max(0.0, min(float(_g("hora", 12)), 23.0))
+    hora_sin = float(np.sin(2 * np.pi * hora / 24))
+    hora_cos = float(np.cos(2 * np.pi * hora / 24))
+
+    dia = max(0.0, min(float(_g("dia", 0)), 6.0))
+    dia_sin = float(np.sin(2 * np.pi * dia / 7))
+    dia_cos = float(np.cos(2 * np.pi * dia / 7))
+
+    hist_n   = min(float(_g("hist_7d", 0)) / 7.0, 1.0)
+    alerta_p = float(alerta_previa)
+    riesgo   = float(_g("riesgo_zona", 0.5))
+
+    # flag_visual: si el payload trae evidencia YOLO validada se usa como
+    # señal causal; si no existe, se mantiene la simulacion reproducible.
+    ataque = int(_g("ataque_ocurrido", 0))
+    if fila.get("flag_visual") is not None:
+        try:
+            flag_visual = float(_g("flag_visual", 0.0))
+        except (TypeError, ValueError):
+            flag_visual = 0.0
+        flag_visual = max(0.0, min(flag_visual, 1.0))
+    else:
+        p_vis = 0.88 if ataque == 1 else 0.05
+        rng = rng if rng is not None else np.random.default_rng()
+        flag_visual = float(rng.random() < p_vis)
+
+    # ── Gravedad del evento (campos 9-11) ───────────────────────────────
+    homicidio = float(_g("homicidio",  0))
+    herido    = float(_g("herido",     0))
+    arma_n    = float(_g("arma_id_n",  0.0))
+
+    # ── Contexto de extorsión (campos 12-14) ────────────────────────────
+    ext_rel   = float(_g("extorsion_relacionada", 0))
+    monto_n   = float(_g("monto_cupo_n",         0.0))
+    tipo_ext  = float(_g("tipo_ext_n",            0.0))
+
+    # ── Modus operandi (campo 15) ────────────────────────────────────────
+    vehiculo_n = float(_g("vehiculo_id_n", 0.0))
+
+    # ── Perfil de la víctima (campos 16-18) ─────────────────────────────
+    sexo_n  = float(_g("victima_sexo_n",   0.0))
+    edad_n  = float(_g("victima_edad_n",   0.0))
+    menor   = float(_g("victima_menor_edad", 0))
+
+    obs = np.array(
+        [zona_n, hora_sin, hora_cos, dia_sin, dia_cos,
+         hist_n, alerta_p, riesgo, flag_visual,
+         homicidio, herido, arma_n,
+         ext_rel, monto_n, tipo_ext,
+         vehiculo_n,
+         sexo_n, edad_n, menor],
+        dtype=np.float32,
+    )
+    if use_demand_forecast:
+        demanda_pred_n = float(_g("demanda_pred_n", 0.0))
+        demanda_pred_n = max(0.0, min(demanda_pred_n, 1.0))
+        obs = np.append(obs, np.float32(demanda_pred_n)).astype(np.float32)
+    if causal_obs:
+        obs[list(NON_CAUSAL_OBS_IDX)] = 0.0
+    return obs
+
+
 class LimaTransporteEnv(AECEnv):
     """
     Entorno PettingZoo AEC para el sistema MADRL de Lima.
@@ -402,68 +492,13 @@ class LimaTransporteEnv(AECEnv):
         idx  = self._indice[agente] % len(df)
         fila = df.iloc[idx]
 
-        # ── Contexto espacio-temporal (campos 0-8) ──────────────────────────
-        zona_n = float(fila.get("zona_id", 0)) / float(N_ZONAS - 1)  # [0,23] → [0,1]
-
-        hora = max(0.0, min(float(fila.get("hora", 12)), 23.0))
-        hora_sin = float(np.sin(2 * np.pi * hora / 24))
-        hora_cos = float(np.cos(2 * np.pi * hora / 24))
-
-        dia = max(0.0, min(float(fila.get("dia", 0)), 6.0))
-        dia_sin = float(np.sin(2 * np.pi * dia / 7))
-        dia_cos = float(np.cos(2 * np.pi * dia / 7))
-
-        hist_n   = min(float(fila.get("hist_7d", 0)) / 7.0, 1.0)
-        alerta_p = float(self._alerta_previa[agente])
-        riesgo   = float(fila.get("riesgo_zona", 0.5))
-
-        # flag_visual: si el dataset trae evidencia YOLO validada se usa como
-        # señal causal; si no existe, se mantiene la simulacion reproducible.
-        ataque = int(fila.get("ataque_ocurrido", 0))
-        if "flag_visual" in fila.index:
-            try:
-                flag_visual = float(fila.get("flag_visual", 0.0))
-            except (TypeError, ValueError):
-                flag_visual = 0.0
-            flag_visual = max(0.0, min(flag_visual, 1.0))
-        else:
-            p_vis = 0.88 if ataque == 1 else 0.05
-            flag_visual = float(self._rng.random() < p_vis)
-
-        # ── Gravedad del evento (campos 9-11) ───────────────────────────────
-        homicidio = float(fila.get("homicidio",  0))
-        herido    = float(fila.get("herido",     0))
-        arma_n    = float(fila.get("arma_id_n",  0.0))
-
-        # ── Contexto de extorsión (campos 12-14) ────────────────────────────
-        ext_rel   = float(fila.get("extorsion_relacionada", 0))
-        monto_n   = float(fila.get("monto_cupo_n",         0.0))
-        tipo_ext  = float(fila.get("tipo_ext_n",            0.0))
-
-        # ── Modus operandi (campo 15) ────────────────────────────────────────
-        vehiculo_n = float(fila.get("vehiculo_id_n", 0.0))
-
-        # ── Perfil de la víctima (campos 16-18) ─────────────────────────────
-        sexo_n  = float(fila.get("victima_sexo_n",   0.0))
-        edad_n  = float(fila.get("victima_edad_n",   0.0))
-        menor   = float(fila.get("victima_menor_edad", 0))
-
-        obs = np.array(
-            [zona_n, hora_sin, hora_cos, dia_sin, dia_cos,
-             hist_n, alerta_p, riesgo, flag_visual,
-             homicidio, herido, arma_n,
-             ext_rel, monto_n, tipo_ext,
-             vehiculo_n,
-             sexo_n, edad_n, menor],
-            dtype=np.float32,
+        return build_obs_from_row(
+            fila,
+            alerta_previa=self._alerta_previa[agente],
+            use_demand_forecast=self.use_demand_forecast,
+            causal_obs=self.causal_obs,
+            rng=self._rng,
         )
-        if self.use_demand_forecast:
-            demanda_pred_n = float(fila.get("demanda_pred_n", 0.0))
-            demanda_pred_n = max(0.0, min(demanda_pred_n, 1.0))
-            obs = np.append(obs, np.float32(demanda_pred_n)).astype(np.float32)
-        if self.causal_obs:
-            obs[list(NON_CAUSAL_OBS_IDX)] = 0.0
-        return obs
 
     def _interpretar_accion(self, agente: str, accion) -> tuple[int, int, int, float, float, float]:
         """
