@@ -440,8 +440,11 @@ class LimaTransporteEnv(AECEnv):
         self._alerta_previa = {ag: 0 for ag in AGENTES}
         self._historial     = {ag: [] for ag in AGENTES}
 
-        # Resetear índices de datos
-        self._indice = {ag: 0 for ag in AGENTES}
+        # self._indice NO se reinicia aqui a proposito: debe seguir avanzando
+        # entre episodios (con wraparound via `% len(df)` en _get_obs/step) para
+        # que una corrida de muchos episodios recorra el dataset completo en vez
+        # de repetir siempre las mismas primeras `max_steps` filas de cada agente.
+        # Se inicializa una sola vez en __init__.
 
         # Inicializar buffers PettingZoo
         self.rewards      = {ag: 0.0  for ag in self.agents}
