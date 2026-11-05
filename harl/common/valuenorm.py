@@ -26,13 +26,13 @@ class ValueNorm(nn.Module):
         self.tpdv = dict(dtype=torch.float32, device=device)
 
         self.running_mean = nn.Parameter(
-            torch.zeros(input_shape), requires_grad=False
-        ).to(**self.tpdv)
+            torch.zeros(input_shape, **self.tpdv), requires_grad=False
+        )
         self.running_mean_sq = nn.Parameter(
-            torch.zeros(input_shape), requires_grad=False
-        ).to(**self.tpdv)
-        self.debiasing_term = nn.Parameter(torch.tensor(0.0), requires_grad=False).to(
-            **self.tpdv
+            torch.zeros(input_shape, **self.tpdv), requires_grad=False
+        )
+        self.debiasing_term = nn.Parameter(
+            torch.tensor(0.0, **self.tpdv), requires_grad=False
         )
 
     def running_mean_var(self):
